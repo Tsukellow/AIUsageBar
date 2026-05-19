@@ -3,16 +3,21 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var claudeModel: ClaudeModel
+    @ObservedObject var deepSeekModel: DeepSeekModel
     @ObservedObject private var loginManager: LaunchAtLoginManager
 
     @AppStorage(AppSettings.refreshIntervalKey) private var refreshIntervalSeconds = 300.0
     @AppStorage(AppSettings.initialRefreshDelaySecondsKey) private var initialRefreshDelaySeconds = AppSettings.defaultInitialRefreshDelaySeconds
     @AppStorage(AppSettings.claudeSessionCookieKey) private var claudeSessionCookie = ""
+    @AppStorage(AppSettings.deepSeekBearerTokenKey) private var deepSeekBearerToken = ""
+    @AppStorage(AppSettings.deepSeekBalanceThresholdKey) private var deepSeekBalanceThreshold = AppSettings.defaultDeepSeekBalanceThreshold
     @State private var cookieDraft = ""
+    @State private var deepSeekTokenDraft = ""
 
-    init(model: AppModel, claudeModel: ClaudeModel) {
+    init(model: AppModel, claudeModel: ClaudeModel, deepSeekModel: DeepSeekModel) {
         self.model = model
         self.claudeModel = claudeModel
+        self.deepSeekModel = deepSeekModel
         self._loginManager = ObservedObject(wrappedValue: model.loginManager)
     }
 
@@ -32,10 +37,16 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Codex", systemImage: "terminal")
                 }
+
+            self.deepSeekTab()
+                .tabItem {
+                    Label("DeepSeek", systemImage: "terminal")
+                }
         }
         .padding(20)
         .onAppear {
             self.cookieDraft = self.claudeSessionCookie
+            self.deepSeekTokenDraft = self.deepSeekBearerToken
             self.loginManager.refreshStatus()
         }
     }
@@ -271,6 +282,125 @@ struct SettingsView: View {
             }
         } else {
             Text("No Codex data loaded yet.").foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - DeepSeek
+
+    @ViewBuilder
+    private func deepSeekTab() -> some View {
+        self.settingsScrollView {
+            self.settingsSection(title: "Enabled", systemImage: "power") {
+                self.settingsCard {
+                    HStack {
+                        Text("DeepSeek usage tracking")
+                        Spacer()
+                        Toggle("", isOn: self.$deepSeekModel.isEnabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            self.settingsSection(title: "Bearer Token", systemImage: "key") {
+                self.settingsCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        TextField("Paste token here...", text: self.$deepSeekTokenDraft, axis: .vertical)
+                            .lineLimit(3...5)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+
+                        HStack {
+                            Button("Save") {
+                                AppSettings.deepSeekBearerToken = self.deepSeekTokenDraft
+                                self.deepSeekBearerToken = self.deepSeekTokenDraft
+                                self.deepSeekModel.refreshNow()
+                            }
+                            .disabled(self.deepSeekTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.deepSeekModel.isEnabled)
+
+                            if !self.deepSeekBearerToken.isEmpty {
+                                Button("Clear", role: .destructive) {
+                                    self.deepSeekTokenDraft = ""
+                                    AppSettings.deepSeekBearerToken = ""
+                                    self.deepSeekBearerToken = ""
+                                }
+                            }
+
+                            Spacer()
+
+                            Button("Refresh Now") {
+                                self.deepSeekModel.refreshNow()
+                            }
+                            .disabled(self.deepSeekBearerToken.isEmpty || !self.deepSeekModel.isEnabled)
+                        }
+                    }
+                }
+
+                Text("Open **platform.deepseek.com** → F12 → Console → enter:\n`JSON.parse(localStorage.getItem('userToken')).value`")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            self.settingsSection(title: "Balance Threshold", systemImage: "dollarsign.circle") {
+                self.settingsCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Threshold")
+                            Spacer()
+                            Text(String(format: "¥%.0f", self.deepSeekBalanceThreshold))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(
+                            value: self.$deepSeekBalanceThreshold,
+                            in: 10...200,
+                            step: 10
+                        ) {
+                            EmptyView()
+                        } minimumValueLabel: {
+                            Text("¥10").font(.caption).foregroundStyle(.secondary)
+                        } maximumValueLabel: {
+                            Text("¥200").font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        Text("Ring shows full when balance reaches this value.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            self.settingsSection(title: "Status", systemImage: "info.circle") {
+                self.settingsCard {
+                    self.deepSeekStatusContent()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func deepSeekStatusContent() -> some View {
+        if self.deepSeekModel.isRefreshing {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small).scaleEffect(0.8)
+                Text("Connecting...").foregroundStyle(.secondary)
+            }
+        } else if let error = self.deepSeekModel.errorMessage {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                Text(error).foregroundStyle(.red)
+            }
+        } else if self.deepSeekModel.snapshot != nil {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("Connected")
+            }
+        } else if AppSettings.deepSeekBearerToken.isEmpty {
+            Text("No token configured.").foregroundStyle(.secondary)
+        } else {
+            Text("Waiting for first refresh...").foregroundStyle(.secondary)
         }
     }
 

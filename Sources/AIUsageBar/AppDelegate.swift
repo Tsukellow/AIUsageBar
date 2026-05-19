@@ -6,6 +6,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let codexModel = AppModel()
     let claudeModel = ClaudeModel()
+    let deepSeekModel = DeepSeekModel()
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rootView: CombinedMenuContentView(
                 claudeModel: self.claudeModel,
                 codexModel: self.codexModel,
+                deepSeekModel: self.deepSeekModel,
                 openSettings: { [weak self] in
                     self?.openSettingsWindow()
                 }
@@ -71,6 +73,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             .store(in: &self.cancellables)
+
+        self.deepSeekModel.objectWillChange
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.updateStatusItemImage()
+                }
+            }
+            .store(in: &self.cancellables)
     }
 
     private func updateStatusItemImage() {
@@ -91,6 +101,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 topText: self.codexModel.menuBarFiveHourRemainingText,
                 bottomText: self.codexModel.menuBarWeeklyRemainingText,
                 ringColor: NSColor.white
+            ))
+        }
+
+        if self.deepSeekModel.isEnabled {
+            services.append(ServiceIconData(
+                ringFraction: self.deepSeekModel.menuBarRingFraction,
+                topText: self.deepSeekModel.menuBarTopText,
+                bottomText: self.deepSeekModel.menuBarBottomText,
+                ringColor: NSColor(red: 0.302, green: 0.420, blue: 0.996, alpha: 1.0)
             ))
         }
 
@@ -128,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let settingsWindowSize = NSSize(width: 450, height: 450)
-        let settingsView = SettingsView(model: self.codexModel, claudeModel: self.claudeModel)
+        let settingsView = SettingsView(model: self.codexModel, claudeModel: self.claudeModel, deepSeekModel: self.deepSeekModel)
         let hostingController = NSHostingController(
             rootView: settingsView.frame(width: settingsWindowSize.width, height: settingsWindowSize.height)
         )

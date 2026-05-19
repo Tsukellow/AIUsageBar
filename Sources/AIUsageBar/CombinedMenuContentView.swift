@@ -5,6 +5,7 @@ import SwiftUI
 struct CombinedMenuContentView: View {
     @ObservedObject var claudeModel: ClaudeModel
     @ObservedObject var codexModel: AppModel
+    @ObservedObject var deepSeekModel: DeepSeekModel
     let openSettings: () -> Void
 
     var body: some View {
@@ -19,11 +20,17 @@ struct CombinedMenuContentView: View {
                 Divider()
             }
 
+            if self.deepSeekModel.isEnabled {
+                self.deepSeekSection()
+                Divider()
+            }
+
             // Action bar
             HStack {
                 HoverIconButton(systemName: "arrow.clockwise", help: "Refresh all") {
                     if self.claudeModel.isEnabled { self.claudeModel.refreshNow() }
                     if self.codexModel.isEnabled { self.codexModel.refreshNow() }
+                    if self.deepSeekModel.isEnabled { self.deepSeekModel.refreshNow() }
                 }
                 .keyboardShortcut("r")
 
@@ -200,6 +207,67 @@ struct CombinedMenuContentView: View {
             Text(title)
                 .foregroundStyle(.secondary)
             Spacer()
+            Text(value)
+                .font(.body.monospacedDigit())
+        }
+    }
+
+    // MARK: - DeepSeek
+
+    @ViewBuilder
+    private func deepSeekSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 6) {
+                Text("DeepSeek")
+                    .font(.headline)
+                Link(destination: URL(string: "https://platform.deepseek.com/usage")!) {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 10, weight: .medium))
+                        .frame(width: 12, height: 12)
+                }
+                .help("Open DeepSeek usage page")
+                Spacer()
+                if let snapshot = self.deepSeekModel.snapshot {
+                    Self.refreshedText(snapshot.refreshedAt)
+                }
+            }
+
+            if let snapshot = self.deepSeekModel.snapshot {
+                self.deepSeekRow(title: "Balance",
+                                 value: String(format: "¥%.2f", snapshot.balance))
+                self.deepSeekRow(title: "Today tokens",
+                                 value: "\(snapshot.todayTotalTokens) (in \(snapshot.todayPromptTokens) / out \(snapshot.todayCompletionTokens))")
+                self.deepSeekRow(title: "Cache hit rate",
+                                 value: String(format: "%.2f%%", snapshot.cacheHitRate))
+                self.deepSeekRow(title: "Today cost",
+                                 value: String(format: "¥%.4f", snapshot.todayCost))
+                self.deepSeekRow(title: "Monthly cost",
+                                 value: String(format: "¥%.4f", snapshot.monthlyCost))
+            } else if let dueAt = self.deepSeekModel.pendingInitialRefreshDueAt {
+                Self.initialRefreshText("Initial sync starts in", until: dueAt)
+            } else if self.deepSeekModel.isRefreshing {
+                ProgressView("Loading...")
+                    .controlSize(.small)
+            } else if AppSettings.deepSeekBearerToken.isEmpty {
+                Text("No token configured. Open Settings to add one.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let error = self.deepSeekModel.errorMessage {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func deepSeekRow(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .font(.caption)
             Text(value)
                 .font(.body.monospacedDigit())
         }

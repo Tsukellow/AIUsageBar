@@ -46,6 +46,39 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: self.codexEnabledKey) }
     }
 
+    // MARK: - DeepSeek
+
+    static let deepSeekEnabledKey = "deepSeekEnabled"
+    static let deepSeekBearerTokenKey = "deepSeekBearerToken"
+    static let deepSeekBalanceThresholdKey = "deepSeekBalanceThreshold"
+    static let defaultDeepSeekBalanceThreshold = 50.0
+
+    static var deepSeekEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: self.deepSeekEnabledKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: self.deepSeekEnabledKey)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: self.deepSeekEnabledKey) }
+    }
+
+    static var deepSeekBearerToken: String {
+        get { UserDefaults.standard.string(forKey: self.deepSeekBearerTokenKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: self.deepSeekBearerTokenKey) }
+    }
+
+    static var deepSeekBalanceThreshold: Double {
+        get {
+            let defaults = UserDefaults.standard
+            if defaults.object(forKey: self.deepSeekBalanceThresholdKey) == nil {
+                return self.defaultDeepSeekBalanceThreshold
+            }
+            return defaults.double(forKey: self.deepSeekBalanceThresholdKey)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: self.deepSeekBalanceThresholdKey) }
+    }
+
     // MARK: - Claude
 
     static let claudeSessionCookieKey = "claudeSessionCookie"
