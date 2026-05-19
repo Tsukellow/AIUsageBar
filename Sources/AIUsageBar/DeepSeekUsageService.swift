@@ -82,9 +82,21 @@ actor DeepSeekUsageService {
     }
 
     private func decodeEnvelope<T: Decodable>(_ data: Data) throws -> T {
-        let envelope = try JSONDecoder().decode(DeepSeekAPIEnvelope<T>.self, from: data)
-        guard envelope.code == 0, let bizData = envelope.bizData else {
-            throw DeepSeekUsageError.invalidResponse("DeepSeek API biz_code error")
+        let envelope: DeepSeekAPIEnvelope<T>
+        do {
+            envelope = try JSONDecoder().decode(DeepSeekAPIEnvelope<T>.self, from: data)
+        } catch {
+            let body = String(data: data, encoding: .utf8) ?? "<binary>"
+            throw DeepSeekUsageError.invalidResponse("DeepSeek decode failed: \(error.localizedDescription). Body: \(body.prefix(500))")
+        }
+        guard envelope.apiCode == 0 else {
+            throw DeepSeekUsageError.invalidResponse("DeepSeek API returned code \(envelope.apiCode)")
+        }
+        guard envelope.bizCode == 0 else {
+            throw DeepSeekUsageError.invalidResponse("DeepSeek API biz_code = \(envelope.bizCode)")
+        }
+        guard let bizData = envelope.bizData else {
+            throw DeepSeekUsageError.invalidResponse("DeepSeek API returned null biz_data")
         }
         return bizData
     }

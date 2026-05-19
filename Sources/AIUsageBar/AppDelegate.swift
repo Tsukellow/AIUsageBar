@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsWindowSize = NSSize(width: 500, height: 520)
+        let settingsWindowSize = NSSize(width: 520, height: 580)
         let settingsView = SettingsView(model: self.codexModel, claudeModel: self.claudeModel, deepSeekModel: self.deepSeekModel)
         let hostingController = NSHostingController(
             rootView: settingsView.frame(width: settingsWindowSize.width, height: settingsWindowSize.height)

@@ -110,7 +110,8 @@ struct DeepSeekCostResponse: Decodable {
 
 /// Outer wrapper: { code: 0, data: { biz_code: 0, biz_data: {...} } }
 struct DeepSeekAPIEnvelope<BizData: Decodable>: Decodable {
-    let code: Int?
+    let apiCode: Int
+    let bizCode: Int
     let bizData: BizData?
 
     private struct DataWrapper: Decodable {
@@ -125,8 +126,9 @@ struct DeepSeekAPIEnvelope<BizData: Decodable>: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.code = try container.decodeIfPresent(Int.self, forKey: .code)
+        self.apiCode = try container.decodeIfPresent(Int.self, forKey: .code) ?? -1
         let dataWrapper = try container.decodeIfPresent(DataWrapper.self, forKey: .data)
+        self.bizCode = dataWrapper?.bizCode ?? -1
         self.bizData = dataWrapper?.bizData
     }
 
