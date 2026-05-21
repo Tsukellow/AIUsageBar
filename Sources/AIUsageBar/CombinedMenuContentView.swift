@@ -235,14 +235,26 @@ struct CombinedMenuContentView: View {
             if let snapshot = self.deepSeekModel.snapshot {
                 self.deepSeekRow(title: "Balance",
                                  value: String(format: "¥%.2f", snapshot.balance))
-                self.deepSeekRow(title: "Today tokens",
-                                 value: "\(snapshot.todayTotalTokens) (in \(snapshot.todayPromptTokens) / out \(snapshot.todayCompletionTokens))")
                 self.deepSeekRow(title: "Cache hit rate",
                                  value: String(format: "%.2f%%", snapshot.cacheHitRate))
+                VStack(alignment: .leading, spacing: 4) {
+                    self.deepSeekRow(title: "Today tokens",
+                                     value: Self.commaNum(snapshot.todayTotalTokens))
+                    HStack {
+                        Text("Input").foregroundStyle(.tertiary).font(.caption)
+                        Spacer()
+                        Text(Self.commaNum(snapshot.todayPromptTokens)).font(.caption.monospacedDigit())
+                    }
+                    HStack {
+                        Text("Output").foregroundStyle(.tertiary).font(.caption)
+                        Spacer()
+                        Text(Self.commaNum(snapshot.todayCompletionTokens)).font(.caption.monospacedDigit())
+                    }
+                }
                 self.deepSeekRow(title: "Today cost",
-                                 value: String(format: "¥%.4f", snapshot.todayCost))
+                                 value: String(format: "¥%.2f", snapshot.todayCost))
                 self.deepSeekRow(title: "Monthly cost",
-                                 value: String(format: "¥%.4f", snapshot.monthlyCost))
+                                 value: String(format: "¥%.2f", snapshot.monthlyCost))
             } else if let dueAt = self.deepSeekModel.pendingInitialRefreshDueAt {
                 Self.initialRefreshText("Initial sync starts in", until: dueAt)
             } else if self.deepSeekModel.isRefreshing {
@@ -264,10 +276,10 @@ struct CombinedMenuContentView: View {
 
     @ViewBuilder
     private func deepSeekRow(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        HStack {
             Text(title)
                 .foregroundStyle(.secondary)
-                .font(.caption)
+            Spacer()
             Text(value)
                 .font(.body.monospacedDigit())
         }
@@ -309,6 +321,16 @@ struct CombinedMenuContentView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private static let numberFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        return f
+    }()
+
+    private static func commaNum(_ value: Int) -> String {
+        Self.numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     private static func percentString(_ value: Double?) -> String {

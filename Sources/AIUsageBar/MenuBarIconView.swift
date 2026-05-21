@@ -1,5 +1,10 @@
 import AppKit
 
+enum CenterSymbol {
+    case checkmark
+    case exclamation
+}
+
 /// Data for one service's ring + text block in the menu bar.
 struct ServiceIconData {
     let ringFraction: Double
@@ -7,12 +12,14 @@ struct ServiceIconData {
     let bottomText: String
     /// Optional ring color; nil uses the default menu bar tint.
     let ringColor: NSColor?
+    let centerSymbol: CenterSymbol?
 
-    init(ringFraction: Double, topText: String, bottomText: String, ringColor: NSColor? = nil) {
+    init(ringFraction: Double, topText: String, bottomText: String, ringColor: NSColor? = nil, centerSymbol: CenterSymbol? = nil) {
         self.ringFraction = ringFraction
         self.topText = topText
         self.bottomText = bottomText
         self.ringColor = ringColor
+        self.centerSymbol = centerSymbol
     }
 }
 
@@ -125,6 +132,11 @@ struct MenuBarIconView {
             arc.stroke()
         }
 
+        // Center symbol (inside ring)
+        if let symbol = block.data.centerSymbol {
+            Self.drawSymbol(symbol, at: center, color: ringColor)
+        }
+
         // Texts
         let topAttrs: [NSAttributedString.Key: Any] = [
             .font: self.topFont,
@@ -147,5 +159,37 @@ struct MenuBarIconView {
             at: NSPoint(x: textX, y: textY + block.topSize.height),
             withAttributes: bottomAttrs
         )
+    }
+
+    // MARK: - Center symbol
+
+    private static func drawSymbol(_ symbol: CenterSymbol, at center: NSPoint, color: NSColor) {
+        color.setStroke()
+        switch symbol {
+        case .checkmark:
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: center.x - 3.5, y: center.y + 0.5))
+            path.line(to: NSPoint(x: center.x - 1, y: center.y + 3))
+            path.line(to: NSPoint(x: center.x + 4, y: center.y - 3))
+            path.lineWidth = 1.8
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            path.stroke()
+        case .exclamation:
+            // Top bar
+            let top = NSBezierPath()
+            top.move(to: NSPoint(x: center.x, y: center.y - 4))
+            top.line(to: NSPoint(x: center.x, y: center.y - 0.5))
+            top.lineWidth = 1.8
+            top.lineCapStyle = .round
+            top.stroke()
+            // Bottom dot
+            let dot = NSBezierPath()
+            dot.move(to: NSPoint(x: center.x, y: center.y + 1.5))
+            dot.line(to: NSPoint(x: center.x, y: center.y + 3))
+            dot.lineWidth = 1.8
+            dot.lineCapStyle = .round
+            dot.stroke()
+        }
     }
 }

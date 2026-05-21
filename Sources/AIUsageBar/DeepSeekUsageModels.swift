@@ -94,6 +94,28 @@ struct DeepSeekUsageResponse: Decodable {
 struct DeepSeekCostResponse: Decodable {
     let days: [DayEntry]?
 
+    /// The cost endpoint returns biz_data as either `{days:[...]}` or `[{days:[...]}]`.
+    init(from decoder: Decoder) throws {
+        // Try single object first
+        if let container = try? decoder.singleValueContainer(),
+           let obj = try? container.decode(Inner.self) {
+            self.days = obj.days
+            return
+        }
+        // Try array, take first element
+        if let container = try? decoder.singleValueContainer(),
+           let arr = try? container.decode([Inner].self),
+           let first = arr.first {
+            self.days = first.days
+            return
+        }
+        self.days = nil
+    }
+
+    private struct Inner: Decodable {
+        let days: [DayEntry]?
+    }
+
     struct DayEntry: Decodable {
         let date: String?
         let data: [ModelEntry]?

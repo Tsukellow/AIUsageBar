@@ -11,6 +11,9 @@ struct SettingsView: View {
     @AppStorage(AppSettings.claudeSessionCookieKey) private var claudeSessionCookie = ""
     @AppStorage(AppSettings.deepSeekBearerTokenKey) private var deepSeekBearerToken = ""
     @AppStorage(AppSettings.deepSeekBalanceThresholdKey) private var deepSeekBalanceThreshold = AppSettings.defaultDeepSeekBalanceThreshold
+    @AppStorage(AppSettings.claudeRingColorHexKey) private var claudeRingColorHex = ""
+    @AppStorage(AppSettings.codexRingColorHexKey) private var codexRingColorHex = ""
+    @AppStorage(AppSettings.deepSeekRingColorHexKey) private var deepSeekRingColorHex = ""
     @State private var cookieDraft = ""
     @State private var deepSeekTokenDraft = ""
 
@@ -192,6 +195,15 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
+                self.settingsCard {
+                    ColorPicker("Color", selection: self.ringColorBinding(
+                        hex: self.$claudeRingColorHex,
+                        default: NSColor(red: 0.85, green: 0.45, blue: 0.34, alpha: 1.0)
+                    ))
+                }
+            }
+
             self.settingsSection(title: "Status", systemImage: "info.circle") {
                 self.settingsCard {
                     self.claudeStatusContent()
@@ -252,6 +264,15 @@ struct SettingsView: View {
                         }
                         .disabled(!self.model.isEnabled)
                     }
+                }
+            }
+
+            self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
+                self.settingsCard {
+                    ColorPicker("Color", selection: self.ringColorBinding(
+                        hex: self.$codexRingColorHex,
+                        default: NSColor.white
+                    ))
                 }
             }
 
@@ -372,6 +393,15 @@ struct SettingsView: View {
                 }
             }
 
+            self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
+                self.settingsCard {
+                    ColorPicker("Color", selection: self.ringColorBinding(
+                        hex: self.$deepSeekRingColorHex,
+                        default: NSColor(red: 0.275, green: 0.549, blue: 0.980, alpha: 1.0)
+                    ))
+                }
+            }
+
             self.settingsSection(title: "Status", systemImage: "info.circle") {
                 self.settingsCard {
                     self.deepSeekStatusContent()
@@ -402,6 +432,13 @@ struct SettingsView: View {
         } else {
             Text("Waiting for first refresh...").foregroundStyle(.secondary)
         }
+    }
+
+    private func ringColorBinding(hex: Binding<String>, default defaultColor: NSColor) -> Binding<Color> {
+        Binding(
+            get: { Color(nsColor: NSColor(hex: hex.wrappedValue) ?? defaultColor) },
+            set: { hex.wrappedValue = NSColor($0).toHex() }
+        )
     }
 
     @ViewBuilder

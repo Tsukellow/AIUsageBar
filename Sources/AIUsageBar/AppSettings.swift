@@ -79,6 +79,27 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: self.deepSeekBalanceThresholdKey) }
     }
 
+    // MARK: - Ring colors
+
+    static let claudeRingColorHexKey = "claudeRingColorHex"
+    static let codexRingColorHexKey = "codexRingColorHex"
+    static let deepSeekRingColorHexKey = "deepSeekRingColorHex"
+
+    static var claudeRingColorHex: String? {
+        get { UserDefaults.standard.string(forKey: self.claudeRingColorHexKey) }
+        set { UserDefaults.standard.set(newValue, forKey: self.claudeRingColorHexKey) }
+    }
+
+    static var codexRingColorHex: String? {
+        get { UserDefaults.standard.string(forKey: self.codexRingColorHexKey) }
+        set { UserDefaults.standard.set(newValue, forKey: self.codexRingColorHexKey) }
+    }
+
+    static var deepSeekRingColorHex: String? {
+        get { UserDefaults.standard.string(forKey: self.deepSeekRingColorHexKey) }
+        set { UserDefaults.standard.set(newValue, forKey: self.deepSeekRingColorHexKey) }
+    }
+
     // MARK: - Claude
 
     static let claudeSessionCookieKey = "claudeSessionCookie"

@@ -78,8 +78,15 @@ final class DeepSeekModel: ObservableObject {
     }
 
     var menuBarBottomText: String {
-        guard let snapshot = self.snapshot else { return "--%" }
-        return "\(Int(snapshot.cacheHitRate.rounded()))%"
+        guard let snapshot = self.snapshot else { return "--" }
+        return String(format: "%.2f", snapshot.balance)
+    }
+
+    var menuBarCenterSymbol: CenterSymbol? {
+        guard let snapshot = self.snapshot else { return nil }
+        let threshold = AppSettings.deepSeekBalanceThreshold
+        let warnAt = threshold * 0.1
+        return snapshot.balance > warnAt ? .checkmark : .exclamation
     }
 
     var pendingInitialRefreshDueAt: Date? {

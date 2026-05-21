@@ -86,12 +86,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItemImage() {
         var services: [ServiceIconData] = []
 
+        let claudeRing = NSColor(hex: AppSettings.claudeRingColorHex)
+            ?? NSColor(red: 0.85, green: 0.45, blue: 0.34, alpha: 1.0)
+        let codexRing = NSColor(hex: AppSettings.codexRingColorHex)
+            ?? NSColor.white
+        let deepSeekRing = NSColor(hex: AppSettings.deepSeekRingColorHex)
+            ?? NSColor(red: 0.275, green: 0.549, blue: 0.980, alpha: 1.0)
+
         if self.claudeModel.isEnabled {
             services.append(ServiceIconData(
                 ringFraction: self.claudeModel.menuBarFiveHourRemainingFraction,
                 topText: self.claudeModel.menuBarFiveHourRemainingText,
                 bottomText: self.claudeModel.menuBarWeeklyRemainingText,
-                ringColor: NSColor(red: 0.85, green: 0.45, blue: 0.34, alpha: 1.0)
+                ringColor: claudeRing
             ))
         }
 
@@ -100,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ringFraction: self.codexModel.menuBarFiveHourRemainingFraction,
                 topText: self.codexModel.menuBarFiveHourRemainingText,
                 bottomText: self.codexModel.menuBarWeeklyRemainingText,
-                ringColor: NSColor.white
+                ringColor: codexRing
             ))
         }
 
@@ -109,7 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ringFraction: self.deepSeekModel.menuBarRingFraction,
                 topText: self.deepSeekModel.menuBarTopText,
                 bottomText: self.deepSeekModel.menuBarBottomText,
-                ringColor: NSColor(red: 0.302, green: 0.420, blue: 0.996, alpha: 1.0)
+                ringColor: deepSeekRing,
+                centerSymbol: self.deepSeekModel.menuBarCenterSymbol
             ))
         }
 
@@ -146,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsWindowSize = NSSize(width: 520, height: 580)
+        let settingsWindowSize = NSSize(width: 520, height: 670)
         let settingsView = SettingsView(model: self.codexModel, claudeModel: self.claudeModel, deepSeekModel: self.deepSeekModel)
         let hostingController = NSHostingController(
             rootView: settingsView.frame(width: settingsWindowSize.width, height: settingsWindowSize.height)
