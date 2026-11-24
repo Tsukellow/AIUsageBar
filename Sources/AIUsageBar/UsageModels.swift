@@ -16,6 +16,22 @@ struct CodexIdentity: Sendable {
     let authMode: String?
 }
 
+enum CodexRateLimitWindowKind: Equatable {
+    case fiveHour
+    case weekly
+
+    init?(durationSeconds: Int) {
+        switch durationSeconds {
+        case 5 * 60 * 60:
+            self = .fiveHour
+        case 7 * 24 * 60 * 60:
+            self = .weekly
+        default:
+            return nil
+        }
+    }
+}
+
 struct RateLimitSnapshot: Sendable {
     let fiveHourRemainingPercent: Double?
     let fiveHourResetsAt: Date?

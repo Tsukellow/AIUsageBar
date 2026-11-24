@@ -84,6 +84,25 @@ actor CodexOAuthLiveUsageProvider: CodexLiveUsageProviding {
     }
 
     private func makeSnapshot(from response: CodexUsageResponse) -> RateLimitSnapshot? {
+        var fiveHourWindow: CodexUsageResponse.WindowSnapshot?
+        var weeklyWindow: CodexUsageResponse.WindowSnapshot?
+
+        let windows = [
+            response.rateLimit?.primaryWindow,
+            response.rateLimit?.secondaryWindow,
+        ].compactMap { $0 }
+
+        for window in windows {
+            switch CodexRateLimitWindowKind(durationSeconds: window.limitWindowSeconds) {
+            case .fiveHour:
+                fiveHourWindow = fiveHourWindow ?? window
+            case .weekly:
+                weeklyWindow = weeklyWindow ?? window
+            case nil:
+                continue
+            }
+        }
+
         let creditsRemaining: String?
         if response.credits?.unlimited == true {
             creditsRemaining = "Unlimited"
@@ -96,10 +115,10 @@ actor CodexOAuthLiveUsageProvider: CodexLiveUsageProviding {
         }
 
         return RateLimitSnapshot(
-            fiveHourRemainingPercent: response.rateLimit?.primaryWindow.map { max(0, 100 - Double($0.usedPercent)) },
-            fiveHourResetsAt: response.rateLimit?.primaryWindow.map { Date(timeIntervalSince1970: Double($0.resetAt)) },
-            weeklyRemainingPercent: response.rateLimit?.secondaryWindow.map { max(0, 100 - Double($0.usedPercent)) },
-            weeklyResetsAt: response.rateLimit?.secondaryWindow.map { Date(timeIntervalSince1970: Double($0.resetAt)) },
+            fiveHourRemainingPercent: fiveHourWindow.map { max(0, 100 - Double($0.usedPercent)) },
+            fiveHourResetsAt: fiveHourWindow.map { Date(timeIntervalSince1970: Double($0.resetAt)) },
+            weeklyRemainingPercent: weeklyWindow.map { max(0, 100 - Double($0.usedPercent)) },
+            weeklyResetsAt: weeklyWindow.map { Date(timeIntervalSince1970: Double($0.resetAt)) },
             creditsRemaining: creditsRemaining,
             sourceLabel: "Codex OAuth usage API"
         )

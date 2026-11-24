@@ -1,56 +1,127 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
+    private enum Page: Hashable {
+        case general
+        case provider(ProviderID)
+
+        var title: String {
+            switch self {
+            case .general: "General"
+            case .provider(let provider): provider.displayName
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .general: "gearshape"
+            case .provider(.antigravity): "sparkles"
+            case .provider(.grok): "bolt"
+            case .provider: "terminal"
+            }
+        }
+    }
+
     @ObservedObject var model: AppModel
     @ObservedObject var claudeModel: ClaudeModel
     @ObservedObject var deepSeekModel: DeepSeekModel
+    @ObservedObject var antigravityModel: AntigravityModel
+    @ObservedObject var grokModel: GrokModel
     @ObservedObject private var loginManager: LaunchAtLoginManager
+    @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage(AppSettings.refreshIntervalKey) private var refreshIntervalSeconds = 300.0
     @AppStorage(AppSettings.initialRefreshDelaySecondsKey) private var initialRefreshDelaySeconds = AppSettings.defaultInitialRefreshDelaySeconds
+    @AppStorage(AppSettings.showMenuBarNumbersKey) private var showMenuBarNumbers = AppSettings.defaultShowMenuBarNumbers
+    @AppStorage(AppSettings.antigravityThirdPartyDisplayKey) private var antigravityThirdPartyDisplay = AppSettings.defaultAntigravityThirdPartyDisplay
     @AppStorage(AppSettings.claudeSessionCookieKey) private var claudeSessionCookie = ""
     @AppStorage(AppSettings.deepSeekBearerTokenKey) private var deepSeekBearerToken = ""
     @AppStorage(AppSettings.deepSeekBalanceThresholdKey) private var deepSeekBalanceThreshold = AppSettings.defaultDeepSeekBalanceThreshold
-    @AppStorage(AppSettings.claudeRingColorHexKey) private var claudeRingColorHex = ""
-    @AppStorage(AppSettings.codexRingColorHexKey) private var codexRingColorHex = ""
-    @AppStorage(AppSettings.deepSeekRingColorHexKey) private var deepSeekRingColorHex = ""
+    @AppStorage(AppSettings.deepSeekWarningPercentKey) private var deepSeekWarningPercent = AppSettings.defaultDeepSeekWarningPercent
     @State private var cookieDraft = ""
     @State private var deepSeekTokenDraft = ""
+    @State private var page: Page = .general
 
-    init(model: AppModel, claudeModel: ClaudeModel, deepSeekModel: DeepSeekModel) {
+    init(model: AppModel, claudeModel: ClaudeModel, deepSeekModel: DeepSeekModel, antigravityModel: AntigravityModel, grokModel: GrokModel) {
         self.model = model
         self.claudeModel = claudeModel
         self.deepSeekModel = deepSeekModel
+        self.antigravityModel = antigravityModel
+        self.grokModel = grokModel
         self._loginManager = ObservedObject(wrappedValue: model.loginManager)
     }
 
     var body: some View {
-        TabView {
-            self.generalTab()
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
-
-            self.claudeTab()
-                .tabItem {
-                    Label("Claude", systemImage: "terminal")
-                }
-
-            self.codexTab()
-                .tabItem {
-                    Label("Codex", systemImage: "terminal")
-                }
-
-            self.deepSeekTab()
-                .tabItem {
-                    Label("DeepSeek", systemImage: "terminal")
-                }
+        HStack(spacing: 0) {
+            self.sidebar
+            Divider()
+            VStack(alignment: .leading, spacing: 0) {
+                Text(self.page.title)
+                    .font(.title2.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                self.pageContent
+                    .id(self.page)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(20)
         .onAppear {
             self.cookieDraft = self.claudeSessionCookie
             self.deepSeekTokenDraft = self.deepSeekBearerToken
+            let balanceSettings = AppSettings.deepSeekBalanceSettings()
+            self.deepSeekBalanceThreshold = balanceSettings.fullBalance
+            self.deepSeekWarningPercent = balanceSettings.warningPercent
             self.loginManager.refreshStatus()
+        }
+    }
+
+    private var sidebar: some View {
+        List(selection: Binding<Page?>(
+            get: { self.page },
+            set: { if let page = $0 { self.page = page } }
+        )) {
+            self.sidebarRow(.general)
+            Section("Providers") {
+                ForEach(ProviderID.allCases, id: \.self) { provider in
+                    self.sidebarRow(.provider(provider))
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .frame(width: 156)
+        .accessibilityLabel("Settings sections")
+    }
+
+    private func sidebarRow(_ page: Page) -> some View {
+        Label {
+            Text(page.title)
+        } icon: {
+            if case .provider(let provider) = page,
+               let icon = ProviderSidebarImages.image(for: provider, dark: self.colorScheme == .dark) {
+                Image(nsImage: icon)
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: page.symbol)
+            }
+        }
+        .tag(page)
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        switch self.page {
+        case .general: self.generalTab()
+        case .provider(.claude): self.claudeTab()
+        case .provider(.codex): self.codexTab()
+        case .provider(.antigravity): self.antigravityTab()
+        case .provider(.grok): self.grokTab()
+        case .provider(.deepSeek): self.deepSeekTab()
         }
     }
 
@@ -82,6 +153,20 @@ struct SettingsView: View {
                     Text(message)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            self.settingsSection(title: "Menu Bar", systemImage: "menubar.rectangle") {
+                self.settingsCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Show numbers in the menu bar", isOn: self.$showMenuBarNumbers)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Turn off for rings only. Numbers stay visible in the drop-down.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -141,98 +226,26 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func claudeTab() -> some View {
-        self.settingsScrollView {
-            self.settingsSection(title: "Enabled", systemImage: "power") {
-                self.settingsCard {
-                    HStack {
-                        Text("Claude usage tracking")
-                        Spacer()
-                        Toggle("", isOn: self.$claudeModel.isEnabled)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        self.settingsScrollView(provider: .claude) {
+            self.trackingSettings("Claude", provider: .claude, enabled: self.$claudeModel.isEnabled)
+
+            self.connectionSettings(
+                method: "Session Cookie",
+                instructions: "Sign in at **claude.ai**. Open the browser’s developer tools, select **Network**, and reload the page. Copy the **Cookie** request header, then paste and save it below."
+            ) {
+                self.credentialEditor("Paste session cookie", draft: self.$cookieDraft,
+                                      saved: self.$claudeSessionCookie, enabled: self.claudeModel.isEnabled) {
+                    self.claudeModel.refreshNow()
                 }
             }
 
-            self.settingsSection(title: "Session Cookie", systemImage: "key") {
-                self.settingsCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextField("Paste cookie here...", text: self.$cookieDraft, axis: .vertical)
-                            .lineLimit(3...5)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11, design: .monospaced))
-
-                        HStack {
-                            Button("Save") {
-                                AppSettings.claudeSessionCookie = self.cookieDraft
-                                self.claudeSessionCookie = self.cookieDraft
-                                self.claudeModel.refreshNow()
-                            }
-                            .disabled(self.cookieDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.claudeModel.isEnabled)
-
-                            if !self.claudeSessionCookie.isEmpty {
-                                Button("Clear", role: .destructive) {
-                                    self.cookieDraft = ""
-                                    AppSettings.claudeSessionCookie = ""
-                                    self.claudeSessionCookie = ""
-                                }
-                            }
-
-                            Spacer()
-
-                            Button("Refresh Now") {
-                                self.claudeModel.refreshNow()
-                            }
-                            .disabled(self.claudeSessionCookie.isEmpty || !self.claudeModel.isEnabled)
-                        }
-                    }
-                }
-
-                Text("Open **claude.ai** → DevTools (F12) → Network → reload → copy the **Cookie** request header.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            let configured = !self.claudeSessionCookie.isEmpty
+            self.providerStatus(enabled: self.claudeModel.isEnabled, refreshing: self.claudeModel.isRefreshing,
+                                error: self.claudeModel.errorMessage, canRefresh: configured,
+                                message: configured ? "Waiting for first refresh…" : "No session cookie configured.",
+                                connected: configured && self.claudeModel.snapshot != nil) {
+                self.claudeModel.refreshNow()
             }
-
-            self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
-                self.settingsCard {
-                    ColorPicker("Color", selection: self.ringColorBinding(
-                        hex: self.$claudeRingColorHex,
-                        default: NSColor(red: 0.85, green: 0.45, blue: 0.34, alpha: 1.0)
-                    ))
-                }
-            }
-
-            self.settingsSection(title: "Status", systemImage: "info.circle") {
-                self.settingsCard {
-                    self.claudeStatusContent()
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func claudeStatusContent() -> some View {
-        if self.claudeModel.isRefreshing {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small).scaleEffect(0.8)
-                Text("Connecting...").foregroundStyle(.secondary)
-            }
-        } else if let error = self.claudeModel.errorMessage {
-            HStack(spacing: 6) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                Text(error).foregroundStyle(.red)
-            }
-        } else if self.claudeModel.snapshot != nil {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text("Connected")
-            }
-        } else if !AppSettings.claudeSessionCookie.isEmpty {
-            Text("Waiting for first refresh...").foregroundStyle(.secondary)
-        } else {
-            Text("No cookie configured.").foregroundStyle(.secondary)
         }
     }
 
@@ -240,69 +253,19 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func codexTab() -> some View {
-        self.settingsScrollView {
-            self.settingsSection(title: "Enabled", systemImage: "power") {
-                self.settingsCard {
-                    HStack {
-                        Text("Codex usage tracking")
-                        Spacer()
-                        Toggle("", isOn: self.$model.isEnabled)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
+        self.settingsScrollView(provider: .codex) {
+            self.trackingSettings("Codex", provider: .codex, enabled: self.$model.isEnabled)
 
-            self.settingsSection(title: "Actions", systemImage: "arrow.clockwise") {
-                self.settingsCard {
-                    HStack {
-                        Spacer()
-                        Button("Refresh Now") {
-                            self.model.refreshNow()
-                        }
-                        .disabled(!self.model.isEnabled)
-                    }
-                }
+            self.connectionSettings(
+                method: "Codex sign-in",
+                instructions: "Sign in to Codex first, then choose **Refresh Now**. AI Usage Bar uses the existing local session; there’s nothing to paste here."
+            )
+            self.providerStatus(enabled: self.model.isEnabled, refreshing: self.model.isRefreshing,
+                                error: self.model.errorMessage,
+                                message: self.model.snapshot == nil ? "Waiting for first refresh…" : "Live quota not available.",
+                                connected: self.model.snapshot?.rateLimits != nil) {
+                self.model.refreshNow()
             }
-
-            self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
-                self.settingsCard {
-                    ColorPicker("Color", selection: self.ringColorBinding(
-                        hex: self.$codexRingColorHex,
-                        default: NSColor.white
-                    ))
-                }
-            }
-
-            self.settingsSection(title: "Status", systemImage: "info.circle") {
-                self.settingsCard {
-                    self.codexStatusContent()
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func codexStatusContent() -> some View {
-        if self.model.isRefreshing {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small).scaleEffect(0.8)
-                Text("Loading...").foregroundStyle(.secondary)
-            }
-        } else if let error = self.model.errorMessage {
-            HStack(spacing: 6) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                Text(error).foregroundStyle(.red)
-            }
-        } else if self.model.snapshot != nil {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text("Connected")
-            }
-        } else {
-            Text("No Codex data loaded yet.").foregroundStyle(.secondary)
         }
     }
 
@@ -310,144 +273,221 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func deepSeekTab() -> some View {
-        self.settingsScrollView {
-            self.settingsSection(title: "Enabled", systemImage: "power") {
-                self.settingsCard {
-                    HStack {
-                        Text("DeepSeek usage tracking")
-                        Spacer()
-                        Toggle("", isOn: self.$deepSeekModel.isEnabled)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        self.settingsScrollView(provider: .deepSeek) {
+            self.trackingSettings("DeepSeek", provider: .deepSeek, enabled: self.$deepSeekModel.isEnabled)
+
+            self.connectionSettings(
+                method: "Bearer Token",
+                instructions: "Sign in at **platform.deepseek.com**. Open the browser’s developer tools, select **Console**, and run the command below. Paste and save the returned dashboard token, not an API key."
+            ) {
+                Text(verbatim: "JSON.parse(localStorage.getItem('userToken')).value")
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+                self.credentialEditor("Paste bearer token", draft: self.$deepSeekTokenDraft,
+                                      saved: self.$deepSeekBearerToken, enabled: self.deepSeekModel.isEnabled) {
+                    self.deepSeekModel.refreshNow()
                 }
             }
 
-            self.settingsSection(title: "Bearer Token", systemImage: "key") {
+            let configured = !self.deepSeekBearerToken.isEmpty
+            self.providerStatus(enabled: self.deepSeekModel.isEnabled, refreshing: self.deepSeekModel.isRefreshing,
+                                error: self.deepSeekModel.errorMessage, canRefresh: configured,
+                                message: configured ? "Waiting for first refresh…" : "No bearer token configured.",
+                                connected: configured && self.deepSeekModel.snapshot != nil) {
+                self.deepSeekModel.refreshNow()
+            }
+
+            self.settingsSection(title: "Balance", systemImage: "dollarsign.circle") {
                 self.settingsCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        TextField("Paste token here...", text: self.$deepSeekTokenDraft, axis: .vertical)
-                            .lineLimit(3...5)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11, design: .monospaced))
-
-                        HStack {
-                            Button("Save") {
-                                AppSettings.deepSeekBearerToken = self.deepSeekTokenDraft
-                                self.deepSeekBearerToken = self.deepSeekTokenDraft
-                                self.deepSeekModel.refreshNow()
-                            }
-                            .disabled(self.deepSeekTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.deepSeekModel.isEnabled)
-
-                            if !self.deepSeekBearerToken.isEmpty {
-                                Button("Clear", role: .destructive) {
-                                    self.deepSeekTokenDraft = ""
-                                    AppSettings.deepSeekBearerToken = ""
-                                    self.deepSeekBearerToken = ""
-                                }
-                            }
-
-                            Spacer()
-
-                            Button("Refresh Now") {
-                                self.deepSeekModel.refreshNow()
-                            }
-                            .disabled(self.deepSeekBearerToken.isEmpty || !self.deepSeekModel.isEnabled)
-                        }
-                    }
-                }
-
-                Text("Open **platform.deepseek.com** → F12 → Console → enter:\n`JSON.parse(localStorage.getItem('userToken')).value`")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            self.settingsSection(title: "Balance Threshold", systemImage: "dollarsign.circle") {
-                self.settingsCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Threshold")
-                            Spacer()
-                            Text(String(format: "¥%.0f", self.deepSeekBalanceThreshold))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Slider(
-                            value: self.$deepSeekBalanceThreshold,
-                            in: 10...200,
-                            step: 10
-                        ) {
-                            EmptyView()
-                        } minimumValueLabel: {
-                            Text("¥10").font(.caption).foregroundStyle(.secondary)
-                        } maximumValueLabel: {
-                            Text("¥200").font(.caption).foregroundStyle(.secondary)
-                        }
-
-                        Text("Ring shows full when balance reaches this value.")
+                        PresetValueSlider(
+                            "Full ring balance", value: self.$deepSeekBalanceThreshold,
+                            presets: DeepSeekBalanceSettings.balancePresets,
+                            format: { String(format: "¥%.0f", $0) }
+                        )
+                        Divider()
+                        PresetValueSlider(
+                            "Low balance warning", value: self.$deepSeekWarningPercent,
+                            presets: DeepSeekBalanceSettings.warningPresets,
+                            format: { String(format: "%.0f%%", $0) }
+                        )
+                        Text(String(format: "Warn when balance ≤ ¥%.2f.", DeepSeekBalanceSettings(
+                            fullBalance: self.deepSeekBalanceThreshold,
+                            warningPercent: self.deepSeekWarningPercent
+                        ).warningAmount))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
-                self.settingsCard {
-                    ColorPicker("Color", selection: self.ringColorBinding(
-                        hex: self.$deepSeekRingColorHex,
-                        default: NSColor(red: 0.275, green: 0.549, blue: 0.980, alpha: 1.0)
-                    ))
+        }
+    }
+
+    private func ringColorSettings(_ provider: ProviderID) -> some View {
+        self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
+            self.settingsCard { ProviderRingColorPicker(provider: provider) }
+        }
+    }
+
+    private func trackingSettings(_ name: String, provider: ProviderID, enabled: Binding<Bool>) -> some View {
+        self.settingsSection(title: "Tracking and display", systemImage: "power") {
+            self.settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("\(name) usage tracking", isOn: enabled)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    ProviderDisplayPicker(provider: provider,
+                                          title: provider == .antigravity ? AntigravityQuotaSnapshot.Pool.gemini.title : "Show usage in")
+                        .disabled(!enabled.wrappedValue)
+                    if provider == .antigravity {
+                        Picker(AntigravityQuotaSnapshot.Pool.thirdParty.title, selection: self.$antigravityThirdPartyDisplay) {
+                            Text("Do not show").tag(AntigravityThirdPartyDisplay.hidden)
+                            Text("Drop-down only").tag(AntigravityThirdPartyDisplay.menuOnly)
+                            Text("Menu bar and drop-down").tag(AntigravityThirdPartyDisplay.menuBarAndMenu)
+                        }
+                        .disabled(!enabled.wrappedValue)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func antigravityTab() -> some View {
+        self.settingsScrollView(provider: .antigravity) {
+            self.trackingSettings(ProviderID.antigravity.displayName, provider: .antigravity, enabled: self.$antigravityModel.isEnabled)
+            self.connectionSettings(
+                method: "Antigravity CLI",
+                instructions: "Sign in to `agy`, choose **Connect Status Line**, then open a new `agy` session. Use `/usage` there to refresh the quota snapshot."
+            ) {
+                HStack {
+                    Button("Connect Status Line") { self.antigravityModel.connect() }
+                        .disabled(!self.antigravityModel.isEnabled)
+                    Link("Setup Guide", destination: URL(string: "https://antigravity.google/docs/cli/statusline/")!)
                 }
             }
+            self.providerStatus(enabled: self.antigravityModel.isEnabled, refreshing: false,
+                                error: self.antigravityModel.errorMessage,
+                                message: self.antigravityModel.isStale ? "Snapshot is stale. Run /usage in agy." : "Waiting for a CLI snapshot…",
+                                connected: self.antigravityModel.snapshot != nil && !self.antigravityModel.isStale,
+                                refreshTitle: "Read Snapshot") {
+                self.antigravityModel.refreshNow()
+            }
+        }
+    }
 
-            self.settingsSection(title: "Status", systemImage: "info.circle") {
-                self.settingsCard {
-                    self.deepSeekStatusContent()
+    private func grokTab() -> some View {
+        self.settingsScrollView(provider: .grok) {
+            self.trackingSettings("Grok", provider: .grok, enabled: self.$grokModel.isEnabled)
+            self.connectionSettings(
+                method: "Grok Build CLI",
+                instructions: "Install Grok Build, run `grok login` in Terminal, then choose **Refresh Now**. If the CLI isn’t found automatically, choose its executable below."
+            ) {
+                LabeledContent("Executable", value: self.grokModel.executablePath.isEmpty ? "Automatic" : self.grokModel.executablePath)
+                    .lineLimit(2)
+                HStack {
+                    Button("Choose Executable…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = false
+                        panel.allowsMultipleSelection = false
+                        if panel.runModal() == .OK, let url = panel.url {
+                            self.grokModel.setExecutablePath(url.path)
+                        }
+                    }
+                    Button("Use Automatic") { self.grokModel.setExecutablePath("") }
+                        .disabled(self.grokModel.executablePath.isEmpty)
+                }
+                HStack {
+                    Link("Setup Guide", destination: URL(string: "https://docs.x.ai/build/overview")!)
+                    Link("Open Grok Usage", destination: URL(string: "https://grok.com/dashboard")!)
+                }
+            }
+            self.providerStatus(enabled: self.grokModel.isEnabled, refreshing: self.grokModel.isRefreshing,
+                                error: self.grokModel.errorMessage, connected: self.grokModel.snapshot != nil) {
+                self.grokModel.refreshNow()
+            }
+        }
+    }
+
+    private func connectionSettings(method: String, instructions: LocalizedStringKey) -> some View {
+        self.connectionSettings(method: method, instructions: instructions) { EmptyView() }
+    }
+
+    private func connectionSettings<Content: View>(method: String, instructions: LocalizedStringKey,
+                                                   @ViewBuilder content: () -> Content) -> some View {
+        self.settingsSection(title: "Connection", systemImage: "link") {
+            self.settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(method).font(.subheadline.weight(.semibold))
+                    Text(instructions).font(.footnote).foregroundStyle(.secondary)
+                    content()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func credentialEditor(_ placeholder: String, draft: Binding<String>, saved: Binding<String>,
+                                  enabled: Bool, didSave: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField(placeholder, text: draft, axis: .vertical)
+                .lineLimit(3...5)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, design: .monospaced))
+            HStack {
+                Button("Save") {
+                    saved.wrappedValue = draft.wrappedValue
+                    didSave()
+                }
+                .disabled(!enabled || draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if !saved.wrappedValue.isEmpty {
+                    Button("Clear", role: .destructive) {
+                        draft.wrappedValue = ""
+                        saved.wrappedValue = ""
+                    }
                 }
             }
         }
     }
 
-    @ViewBuilder
-    private func deepSeekStatusContent() -> some View {
-        if self.deepSeekModel.isRefreshing {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small).scaleEffect(0.8)
-                Text("Connecting...").foregroundStyle(.secondary)
+    private func providerStatus(enabled: Bool, refreshing: Bool, error: String?, canRefresh: Bool = true,
+                                message: String = "Waiting for first refresh…", connected: Bool,
+                                refreshTitle: String = "Refresh Now", refresh: @escaping () -> Void) -> some View {
+        self.settingsSection(title: "Status", systemImage: "info.circle") {
+            self.settingsCard {
+                HStack(spacing: 12) {
+                    if !enabled {
+                        Text("Tracking is off").foregroundStyle(.secondary)
+                    } else if refreshing {
+                        ProgressView("Refreshing…").controlSize(.small)
+                    } else if let error, canRefresh {
+                        Label(error, systemImage: "xmark.circle.fill").foregroundStyle(.red)
+                            .lineLimit(3).help(error)
+                    } else if connected {
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                    } else {
+                        Text(message).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(refreshTitle, action: refresh)
+                        .fixedSize()
+                        .disabled(!enabled || refreshing || !canRefresh)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-        } else if let error = self.deepSeekModel.errorMessage {
-            HStack(spacing: 6) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                Text(error).foregroundStyle(.red)
-            }
-        } else if self.deepSeekModel.snapshot != nil {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text("Connected")
-            }
-        } else if AppSettings.deepSeekBearerToken.isEmpty {
-            Text("No token configured.").foregroundStyle(.secondary)
-        } else {
-            Text("Waiting for first refresh...").foregroundStyle(.secondary)
         }
     }
 
-    private func ringColorBinding(hex: Binding<String>, default defaultColor: NSColor) -> Binding<Color> {
-        Binding(
-            get: { Color(nsColor: NSColor(hex: hex.wrappedValue) ?? defaultColor) },
-            set: { hex.wrappedValue = NSColor($0).toHex() }
-        )
-    }
-
     @ViewBuilder
-    private func settingsScrollView<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func settingsScrollView<Content: View>(provider: ProviderID? = nil, @ViewBuilder content: () -> Content) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 content()
+                if let provider { self.ringColorSettings(provider) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
         }
     }
 
@@ -470,5 +510,48 @@ struct SettingsView: View {
                 Color.primary.opacity(0.035),
                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
+    }
+}
+
+private struct ProviderDisplayPicker: View {
+    let title: String
+    @AppStorage private var placement: ProviderDisplay
+
+    init(provider: ProviderID, title: String) {
+        self.title = title
+        self._placement = AppStorage(wrappedValue: .menuBarAndMenu, AppSettings.displayKey(for: provider))
+    }
+
+    var body: some View {
+        Picker(self.title, selection: self.$placement) {
+            Text("Drop-down only").tag(ProviderDisplay.menuOnly)
+            Text("Menu bar and drop-down").tag(ProviderDisplay.menuBarAndMenu)
+        }
+    }
+}
+
+private struct ProviderRingColorPicker: View {
+    let provider: ProviderID
+    @AppStorage private var hex: String
+
+    init(provider: ProviderID) {
+        self.provider = provider
+        self._hex = AppStorage(wrappedValue: "", provider.ringColorKey)
+    }
+
+    var body: some View {
+        HStack {
+            ColorPicker("Menu bar ring", selection: Binding(
+                get: { Color(nsColor: self.provider.ringColor(override: self.hex)) },
+                set: { color in
+                    if let rgb = NSColor(color).usingColorSpace(.sRGB) { self.hex = rgb.toHex() }
+                }
+            ), supportsOpacity: false)
+
+            Spacer()
+            Button("Restore Default") { self.hex = "" }
+                .disabled(self.hex.isEmpty)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

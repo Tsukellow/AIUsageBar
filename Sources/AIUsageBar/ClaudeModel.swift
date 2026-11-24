@@ -9,11 +9,8 @@ final class ClaudeModel: ObservableObject {
 
     @Published var isEnabled: Bool {
         didSet {
+            guard self.isEnabled != oldValue else { return }
             AppSettings.claudeEnabled = self.isEnabled
-            if !self.isEnabled && !AppSettings.codexEnabled {
-                self.isEnabled = true
-                return
-            }
             if self.isEnabled {
                 self.startLoop()
                 self.refreshNow()
@@ -27,6 +24,7 @@ final class ClaudeModel: ObservableObject {
     private let initialRefreshDelaySeconds: Double
     private let initialRefreshDueAt: Date
     private var refreshTask: Task<Void, Never>?
+    private let refreshWork = ProviderRefreshWork()
     private var scheduledResetRefreshTask: Task<Void, Never>?
 
     init() {
@@ -51,7 +49,7 @@ final class ClaudeModel: ObservableObject {
             initialDelaySeconds: self.initialRefreshDelaySeconds,
             refreshIntervalSeconds: { AppSettings.refreshIntervalSeconds }
         ) { [weak self] in
-            await self?.refresh()
+            await self?.requestRefresh()?.value
         }
     }
 
@@ -60,6 +58,8 @@ final class ClaudeModel: ObservableObject {
         self.refreshTask = nil
         self.scheduledResetRefreshTask?.cancel()
         self.scheduledResetRefreshTask = nil
+        self.refreshWork.cancel()
+        self.isRefreshing = false
         self.snapshot = nil
         self.errorMessage = nil
     }
@@ -115,12 +115,17 @@ final class ClaudeModel: ObservableObject {
     // MARK: - Actions
 
     func refreshNow() {
-        Task {
-            await self.refresh()
+        _ = self.requestRefresh()
+    }
+
+    private func requestRefresh() -> Task<Void, Never>? {
+        guard self.isEnabled else { return nil }
+        return self.refreshWork.start { [weak self] generation in
+            await self?.refresh(generation: generation)
         }
     }
 
-    private func refresh() async {
+    private func refresh(generation: Int) async {
         let cookie = AppSettings.claudeSessionCookie
         guard !cookie.isEmpty else {
             self.scheduledResetRefreshTask?.cancel()
@@ -131,14 +136,18 @@ final class ClaudeModel: ObservableObject {
         guard !self.isRefreshing else { return }
 
         self.isRefreshing = true
-        defer { self.isRefreshing = false }
+        defer {
+            if generation == self.refreshWork.generation { self.isRefreshing = false }
+        }
 
         do {
             let snap = try await self.service.fetchSnapshot()
+            guard !Task.isCancelled, generation == self.refreshWork.generation else { return }
             self.snapshot = snap
             self.scheduleResetRefresh(from: snap)
             self.errorMessage = nil
         } catch {
+            guard !Task.isCancelled, generation == self.refreshWork.generation else { return }
             self.errorMessage = error.localizedDescription
         }
     }
@@ -148,7 +157,7 @@ final class ClaudeModel: ObservableObject {
         self.scheduledResetRefreshTask = UsageRefreshScheduler.scheduleResetRefresh(
             from: snapshot
         ) { [weak self] in
-            await self?.refresh()
+            await self?.requestRefresh()?.value
         }
     }
 }

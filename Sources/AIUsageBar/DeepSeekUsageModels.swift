@@ -3,23 +3,10 @@ import Foundation
 struct DeepSeekUsageSnapshot: Sendable {
     let refreshedAt: Date
     let balance: Double
-    let todayPromptTokens: Int
-    let todayCompletionTokens: Int
-    let todayCacheHitTokens: Int
-    let todayCacheMissTokens: Int
-    let todayCost: Double
+    let cacheHitRate: Double
+    let todayCost: Double?
     let monthlyTokens: Int
-    let monthlyCost: Double
-
-    var todayTotalTokens: Int {
-        todayPromptTokens + todayCompletionTokens
-    }
-
-    var cacheHitRate: Double {
-        let total = todayCacheHitTokens + todayCacheMissTokens
-        guard total > 0 else { return 0 }
-        return Double(todayCacheHitTokens) / Double(total) * 100
-    }
+    let monthlyCost: Double?
 }
 
 enum DeepSeekUsageError: LocalizedError {
@@ -93,13 +80,15 @@ struct DeepSeekUsageResponse: Decodable {
 
 struct DeepSeekCostResponse: Decodable {
     let days: [DayEntry]?
+    let total: [ModelEntry]?
 
-    /// The cost endpoint returns biz_data as either `{days:[...]}` or `[{days:[...]}]`.
+    /// The cost endpoint returns biz_data as either an object or a one-element array.
     init(from decoder: Decoder) throws {
         // Try single object first
         if let container = try? decoder.singleValueContainer(),
            let obj = try? container.decode(Inner.self) {
             self.days = obj.days
+            self.total = obj.total
             return
         }
         // Try array, take first element
@@ -107,13 +96,25 @@ struct DeepSeekCostResponse: Decodable {
            let arr = try? container.decode([Inner].self),
            let first = arr.first {
             self.days = first.days
+            self.total = first.total
             return
         }
         self.days = nil
+        self.total = nil
     }
 
     private struct Inner: Decodable {
         let days: [DayEntry]?
+        let total: [ModelEntry]?
+
+        private enum CodingKeys: String, CodingKey { case days, total }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            // Each period can still be usable if the other collection changes shape.
+            self.days = try? container.decode([DayEntry].self, forKey: .days)
+            self.total = try? container.decode([ModelEntry].self, forKey: .total)
+        }
     }
 
     struct DayEntry: Decodable {
@@ -126,7 +127,48 @@ struct DeepSeekCostResponse: Decodable {
     }
 
     struct UsageEntry: Decodable {
-        let amount: String?
+        let amount: Double?
+
+        private enum CodingKeys: String, CodingKey { case amount }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let numeric = try? container.decode(Double.self, forKey: .amount)
+            let text = try? container.decode(String.self, forKey: .amount)
+            let value = numeric ?? text.flatMap { Double($0) }
+            self.amount = value.flatMap { $0.isFinite ? $0 : nil }
+        }
+    }
+
+    func cost(on date: String) -> Double? {
+        guard let entries = self.days?.first(where: { $0.date == date })?.data else { return nil }
+        return Self.sumCost(entries)
+    }
+
+    var monthlyCost: Double? {
+        if let total, let sum = Self.sumCost(total) { return sum }
+
+        guard let days else { return nil }
+        var entries: [ModelEntry] = []
+        for day in days {
+            guard let data = day.data else { return nil }
+            entries.append(contentsOf: data)
+        }
+        return Self.sumCost(entries)
+    }
+
+    private static func sumCost(_ modelEntries: [ModelEntry]) -> Double? {
+        var total = 0.0
+        var hasAmount = false
+        for model in modelEntries {
+            guard let entries = model.usage else { return nil }
+            for entry in entries {
+                guard let amount = entry.amount else { return nil }
+                hasAmount = true
+                total += amount
+            }
+        }
+        return hasAmount && total.isFinite ? total : nil
     }
 }
 

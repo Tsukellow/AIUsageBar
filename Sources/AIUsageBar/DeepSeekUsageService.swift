@@ -22,7 +22,9 @@ actor DeepSeekUsageService {
 
         let summary = try await summaryResult
         let usage = try await usageResult
-        let cost = try await costResult
+        // Cost is independent of the wallet and cache metrics.
+        let cost = try? await costResult
+        try Task.checkCancellation()
 
         return self.makeSnapshot(summary: summary, usage: usage, cost: cost, today: today)
     }
@@ -107,73 +109,48 @@ actor DeepSeekUsageService {
     private func makeSnapshot(
         summary: DeepSeekSummaryResponse,
         usage: DeepSeekUsageResponse,
-        cost: DeepSeekCostResponse,
+        cost: DeepSeekCostResponse?,
         today: String
     ) -> DeepSeekUsageSnapshot {
         let balance = Double(summary.walletBalance ?? "0") ?? 0
 
-        let todayTokens = Self.extractTodayTokens(from: usage, today: today)
-        let todayCost = Self.extractTodayCost(from: cost, today: today)
+        let cacheHitRate = Self.extractTodayCacheHitRate(from: usage, today: today)
         let monthlyTokens = Int(summary.monthlyTokenUsage ?? "0") ?? 0
-        let monthlyCost = Double(summary.monthlyCosts?.first?.amount ?? "0") ?? 0
 
         return DeepSeekUsageSnapshot(
             refreshedAt: Date(),
             balance: balance,
-            todayPromptTokens: todayTokens.prompt,
-            todayCompletionTokens: todayTokens.completion,
-            todayCacheHitTokens: todayTokens.cacheHit,
-            todayCacheMissTokens: todayTokens.cacheMiss,
-            todayCost: todayCost,
+            cacheHitRate: cacheHitRate,
+            todayCost: cost?.cost(on: today),
             monthlyTokens: monthlyTokens,
-            monthlyCost: monthlyCost
+            monthlyCost: cost?.monthlyCost
         )
     }
 
     // MARK: - Helpers
 
-    private static func extractTodayTokens(from usage: DeepSeekUsageResponse, today: String) -> (prompt: Int, completion: Int, cacheHit: Int, cacheMiss: Int) {
+    private static func extractTodayCacheHitRate(from usage: DeepSeekUsageResponse, today: String) -> Double {
         guard let todayEntry = usage.days?.first(where: { $0.date == today }) else {
-            return (0, 0, 0, 0)
+            return 0
         }
 
-        var prompt = 0, completion = 0, cacheHit = 0, cacheMiss = 0
+        var cacheHit = 0, cacheMiss = 0
 
         for modelEntry in todayEntry.data ?? [] {
             for ut in modelEntry.usage ?? [] {
-                let amount = Int(ut.amount ?? "0") ?? 0
                 switch ut.type {
-                case "PROMPT_TOKEN":
-                    prompt += amount
                 case "PROMPT_CACHE_HIT_TOKEN":
-                    prompt += amount
-                    cacheHit += amount
+                    cacheHit += Int(ut.amount ?? "0") ?? 0
                 case "PROMPT_CACHE_MISS_TOKEN":
-                    prompt += amount
-                    cacheMiss += amount
-                case "RESPONSE_TOKEN":
-                    completion += amount
+                    cacheMiss += Int(ut.amount ?? "0") ?? 0
                 default:
                     break
                 }
             }
         }
 
-        return (prompt, completion, cacheHit, cacheMiss)
-    }
-
-    private static func extractTodayCost(from cost: DeepSeekCostResponse, today: String) -> Double {
-        guard let todayEntry = cost.days?.first(where: { $0.date == today }) else {
-            return 0
-        }
-
-        var total = 0.0
-        for modelEntry in todayEntry.data ?? [] {
-            for ut in modelEntry.usage ?? [] {
-                total += Double(ut.amount ?? "0") ?? 0
-            }
-        }
-        return total
+        let total = cacheHit + cacheMiss
+        return total > 0 ? Double(cacheHit) / Double(total) * 100 : 0
     }
 
     private static func todayString() -> String {

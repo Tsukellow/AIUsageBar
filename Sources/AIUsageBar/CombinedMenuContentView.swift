@@ -1,29 +1,28 @@
 import AppKit
 import SwiftUI
 
-/// Unified dropdown for both Claude and Codex usage, shown from a single menu bar item.
+/// Unified usage dropdown, shown from a single menu bar item.
 struct CombinedMenuContentView: View {
+    @AppStorage(AppSettings.antigravityThirdPartyDisplayKey) private var antigravityThirdPartyDisplay = AppSettings.defaultAntigravityThirdPartyDisplay
+
     @ObservedObject var claudeModel: ClaudeModel
     @ObservedObject var codexModel: AppModel
     @ObservedObject var deepSeekModel: DeepSeekModel
+    @ObservedObject var antigravityModel: AntigravityModel
+    @ObservedObject var grokModel: GrokModel
     let openSettings: () -> Void
 
     var body: some View {
+        let providers = self.trackedProviders
         VStack(alignment: .leading, spacing: 14) {
-            if self.claudeModel.isEnabled {
-                self.claudeSection()
-                Divider()
+            if !providers.isEmpty {
+                self.providerSections(providers)
+            } else {
+                Text("No providers are tracking usage. Open Settings to enable one.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-
-            if self.codexModel.isEnabled {
-                self.codexSection()
-                Divider()
-            }
-
-            if self.deepSeekModel.isEnabled {
-                self.deepSeekSection()
-                Divider()
-            }
+            Divider()
 
             // Action bar
             HStack {
@@ -31,6 +30,8 @@ struct CombinedMenuContentView: View {
                     if self.claudeModel.isEnabled { self.claudeModel.refreshNow() }
                     if self.codexModel.isEnabled { self.codexModel.refreshNow() }
                     if self.deepSeekModel.isEnabled { self.deepSeekModel.refreshNow() }
+                    if self.antigravityModel.isEnabled { self.antigravityModel.refreshNow() }
+                    if self.grokModel.isEnabled { self.grokModel.refreshNow() }
                 }
                 .keyboardShortcut("r")
 
@@ -48,7 +49,104 @@ struct CombinedMenuContentView: View {
             }
         }
         .padding(16)
-        .frame(width: 300)
+    }
+
+    private var trackedProviders: [ProviderID] {
+        ProviderID.allCases.filter {
+            switch $0 {
+            case .claude: self.claudeModel.isEnabled
+            case .codex: self.codexModel.isEnabled
+            case .antigravity: self.antigravityModel.isEnabled
+            case .grok: self.grokModel.isEnabled
+            case .deepSeek: self.deepSeekModel.isEnabled
+            }
+        }
+    }
+
+    private func providerSections(_ providers: [ProviderID]) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(providers, id: \.self) { provider in
+                if provider != providers.first { Divider() }
+                switch provider {
+                case .claude: self.claudeSection()
+                case .codex: self.codexSection()
+                case .antigravity: self.antigravitySection()
+                case .grok: self.grokSection()
+                case .deepSeek: self.deepSeekSection()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func providerHeader(_ name: String, url: URL, refreshedAt: Date?) -> some View {
+        HStack(spacing: 6) {
+            Text(name).font(.headline)
+            Link(destination: url) {
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 12, height: 12)
+            }
+            .help("Open \(name) usage")
+            Spacer()
+            if let refreshedAt { Self.refreshedText(refreshedAt) }
+        }
+    }
+
+    private func antigravitySection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            self.providerHeader(ProviderID.antigravity.displayName, url: URL(string: "https://antigravity.google/docs/plans")!, refreshedAt: self.antigravityModel.snapshot?.capturedAt)
+            if let snapshot = self.antigravityModel.snapshot {
+                let pools = snapshot.displayedPools(thirdPartyDisplay: self.antigravityThirdPartyDisplay)
+                if pools.isEmpty {
+                    Text("No Antigravity quota to display.").font(.footnote).foregroundStyle(.secondary)
+                } else if self.antigravityModel.isStale {
+                    Text("Last known usage. Open the Antigravity CLI for a new snapshot.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(pools, id: \.self) { pool in
+                    let windows = snapshot.windows.filter { $0.pool == pool }
+                    if self.antigravityThirdPartyDisplay.showsPoolTitle(pool) {
+                        Text(pool.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    ForEach(windows, id: \.period) { window in
+                        let display = window.display
+                        self.usageWindowRow(title: display.title, value: "\(display.percentageText) remaining",
+                                            resetsAt: display.resetsAt)
+                    }
+                }
+            } else if let error = self.antigravityModel.errorMessage {
+                self.usageError(error)
+            } else {
+                Text("Connect Status Line in Settings, then open the Antigravity CLI.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func grokSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            self.providerHeader("Grok", url: URL(string: "https://grok.com/dashboard")!, refreshedAt: self.grokModel.snapshot?.refreshedAt)
+            if let snapshot = self.grokModel.snapshot {
+                if let plan = snapshot.plan, !plan.isEmpty { Text(plan).font(.caption).foregroundStyle(.secondary) }
+                if let window = snapshot.window {
+                    self.usageWindowRow(title: window.title, value: "\(window.percentageText) remaining", resetsAt: window.resetsAt)
+                } else {
+                    Text("Subscription quota not reported.").font(.footnote).foregroundStyle(.secondary)
+                }
+                if let balance = snapshot.prepaidText {
+                    self.usageRow(title: "Extra Usage Credits", value: balance)
+                }
+            } else if let error = self.grokModel.errorMessage {
+                self.usageError(error)
+            } else if self.grokModel.isRefreshing {
+                ProgressView("Refreshing…").controlSize(.small)
+            } else {
+                Text("Waiting for first refresh…").font(.footnote).foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: - Claude
@@ -56,20 +154,8 @@ struct CombinedMenuContentView: View {
     @ViewBuilder
     private func claudeSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 6) {
-                Text("Claude")
-                    .font(.headline)
-                Link(destination: URL(string: "https://claude.ai/settings/usage")!) {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 10, weight: .medium))
-                        .frame(width: 12, height: 12)
-                }
-                .help("Open Claude usage page")
-                Spacer()
-                if let snapshot = self.claudeModel.snapshot {
-                    Self.refreshedText(snapshot.refreshedAt)
-                }
-            }
+            self.providerHeader("Claude", url: URL(string: "https://claude.ai/settings/usage")!,
+                                refreshedAt: self.claudeModel.snapshot?.refreshedAt)
 
             if let snapshot = self.claudeModel.snapshot {
                 if let window = snapshot.fiveHour {
@@ -78,31 +164,24 @@ struct CombinedMenuContentView: View {
                 if let window = snapshot.sevenDay {
                     self.claudeWindowRow(title: "Weekly", window: window)
                 }
+                if let window = snapshot.fableWeekly {
+                    self.claudeWindowRow(title: "Fable Weekly", window: window)
+                }
                 if let extra = snapshot.extraUsage, Self.hasDisplayableClaudeExtraUsage(extra) {
                     if extra.usedCredits > 0 {
-                        HStack {
-                            Text("Extra Usage")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            // used_credits is in cents
-                            Text(String(format: "$%.2f used", extra.usedCredits / 100.0))
-                                .font(.body.monospacedDigit())
-                        }
+                        self.usageRow(title: "Extra Usage", value: String(format: "$%.2f used", extra.usedCredits / 100.0))
                     }
                     if let limit = extra.monthlyLimit, limit > 0 {
-                        HStack {
-                            Text("Monthly Limit")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(String(format: "$%.2f", limit / 100.0))
-                                .font(.body.monospacedDigit())
-                        }
+                        self.usageRow(title: "Monthly Limit", value: String(format: "$%.2f", limit / 100.0))
                     }
+                }
+                if let balance = snapshot.creditBalance {
+                    self.usageRow(title: "Balance", value: Self.claudeMoneyString(balance))
                 }
             } else if let dueAt = self.claudeModel.pendingInitialRefreshDueAt {
                 Self.initialRefreshText("Initial sync starts in", until: dueAt)
             } else if self.claudeModel.isRefreshing {
-                ProgressView("Loading...")
+                ProgressView("Refreshing…")
                     .controlSize(.small)
             } else if AppSettings.claudeSessionCookie.isEmpty {
                 Text("No cookie configured. Open Settings to add one.")
@@ -111,27 +190,14 @@ struct CombinedMenuContentView: View {
             }
 
             if let error = self.claudeModel.errorMessage {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+                self.usageError(error)
             }
         }
     }
 
     @ViewBuilder
     private func claudeWindowRow(title: String, window: ClaudeRateLimitWindow) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("\(Int(window.remainingPercent.rounded()))% remaining")
-                    .font(.body.monospacedDigit())
-            }
-            if let resetsAt = window.resetsAt {
-                Self.resetTimeText(resetsAt)
-            }
-        }
+        self.usageWindowRow(title: title, value: Self.percentString(window.remainingPercent), resetsAt: window.resetsAt)
     }
 
     // MARK: - Codex
@@ -139,27 +205,19 @@ struct CombinedMenuContentView: View {
     @ViewBuilder
     private func codexSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 6) {
-                Text("Codex")
-                    .font(.headline)
-                Link(destination: URL(string: "https://chatgpt.com/codex/settings/usage")!) {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 10, weight: .medium))
-                        .frame(width: 12, height: 12)
-                }
-                .help("Open Codex usage page")
-                Spacer()
-                if let snapshot = self.codexModel.snapshot {
-                    Self.refreshedText(snapshot.refreshedAt)
-                }
-            }
+            self.providerHeader("Codex", url: URL(string: "https://chatgpt.com/settings/usage")!,
+                                refreshedAt: self.codexModel.snapshot?.refreshedAt)
 
             if let snapshot = self.codexModel.snapshot {
                 if let rateLimits = snapshot.rateLimits {
-                    self.codexWindowRow(title: "5 hours", value: Self.percentString(rateLimits.fiveHourRemainingPercent), resetsAt: rateLimits.fiveHourResetsAt)
-                    self.codexWindowRow(title: "Weekly", value: Self.percentString(rateLimits.weeklyRemainingPercent), resetsAt: rateLimits.weeklyResetsAt)
+                    if let remaining = rateLimits.fiveHourRemainingPercent {
+                        self.usageWindowRow(title: "5 hours", value: Self.percentString(remaining), resetsAt: rateLimits.fiveHourResetsAt)
+                    }
+                    if let remaining = rateLimits.weeklyRemainingPercent {
+                        self.usageWindowRow(title: "Weekly", value: Self.percentString(remaining), resetsAt: rateLimits.weeklyResetsAt)
+                    }
                     if let creditsRemaining = rateLimits.creditsRemaining {
-                        self.codexRow(title: "Credits", value: "\(creditsRemaining) remaining")
+                        self.usageRow(title: "Credits", value: "\(creditsRemaining) remaining")
                     }
                 } else if self.codexModel.errorMessage == nil {
                     Text("Live usage source not connected.")
@@ -169,7 +227,7 @@ struct CombinedMenuContentView: View {
             } else if let dueAt = self.codexModel.pendingInitialRefreshDueAt {
                 Self.initialRefreshText("Initial sync starts in", until: dueAt)
             } else if self.codexModel.isRefreshing {
-                ProgressView("Loading...")
+                ProgressView("Refreshing…")
                     .controlSize(.small)
             } else if self.codexModel.errorMessage == nil {
                 Text("No Codex data loaded yet.")
@@ -178,23 +236,15 @@ struct CombinedMenuContentView: View {
             }
 
             if let error = self.codexModel.errorMessage {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+                self.usageError(error)
             }
         }
     }
 
     @ViewBuilder
-    private func codexWindowRow(title: String, value: String, resetsAt: Date?) -> some View {
+    private func usageWindowRow(title: String, value: String, resetsAt: Date?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(value)
-                    .font(.body.monospacedDigit())
-            }
+            self.usageRow(title: title, value: value)
             if let resetsAt {
                 Self.resetTimeText(resetsAt)
             }
@@ -202,7 +252,7 @@ struct CombinedMenuContentView: View {
     }
 
     @ViewBuilder
-    private func codexRow(title: String, value: String) -> some View {
+    private func usageRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
                 .foregroundStyle(.secondary)
@@ -217,48 +267,18 @@ struct CombinedMenuContentView: View {
     @ViewBuilder
     private func deepSeekSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 6) {
-                Text("DeepSeek")
-                    .font(.headline)
-                Link(destination: URL(string: "https://platform.deepseek.com/usage")!) {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 10, weight: .medium))
-                        .frame(width: 12, height: 12)
-                }
-                .help("Open DeepSeek usage page")
-                Spacer()
-                if let snapshot = self.deepSeekModel.snapshot {
-                    Self.refreshedText(snapshot.refreshedAt)
-                }
-            }
+            self.providerHeader("DeepSeek", url: URL(string: "https://platform.deepseek.com/usage")!,
+                                refreshedAt: self.deepSeekModel.snapshot?.refreshedAt)
 
             if let snapshot = self.deepSeekModel.snapshot {
-                self.deepSeekRow(title: "Balance",
-                                 value: String(format: "¥%.2f", snapshot.balance))
-                self.deepSeekRow(title: "Cache hit rate",
-                                 value: String(format: "%.2f%%", snapshot.cacheHitRate))
-                VStack(alignment: .leading, spacing: 4) {
-                    self.deepSeekRow(title: "Today tokens",
-                                     value: Self.commaNum(snapshot.todayTotalTokens))
-                    HStack {
-                        Text("Input").foregroundStyle(.tertiary).font(.caption)
-                        Spacer()
-                        Text(Self.commaNum(snapshot.todayPromptTokens)).font(.caption.monospacedDigit())
-                    }
-                    HStack {
-                        Text("Output").foregroundStyle(.tertiary).font(.caption)
-                        Spacer()
-                        Text(Self.commaNum(snapshot.todayCompletionTokens)).font(.caption.monospacedDigit())
-                    }
-                }
-                self.deepSeekRow(title: "Today cost",
-                                 value: String(format: "¥%.2f", snapshot.todayCost))
-                self.deepSeekRow(title: "Monthly cost",
-                                 value: String(format: "¥%.2f", snapshot.monthlyCost))
+                self.usageRow(title: "Balance", value: String(format: "¥%.2f", snapshot.balance))
+                self.usageRow(title: "Cache hit rate", value: String(format: "%.2f%%", snapshot.cacheHitRate))
+                self.usageRow(title: "Today cost", value: Self.deepSeekCostText(snapshot.todayCost))
+                self.usageRow(title: "Monthly cost", value: Self.deepSeekCostText(snapshot.monthlyCost))
             } else if let dueAt = self.deepSeekModel.pendingInitialRefreshDueAt {
                 Self.initialRefreshText("Initial sync starts in", until: dueAt)
             } else if self.deepSeekModel.isRefreshing {
-                ProgressView("Loading...")
+                ProgressView("Refreshing…")
                     .controlSize(.small)
             } else if AppSettings.deepSeekBearerToken.isEmpty {
                 Text("No token configured. Open Settings to add one.")
@@ -267,25 +287,24 @@ struct CombinedMenuContentView: View {
             }
 
             if let error = self.deepSeekModel.errorMessage {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+                self.usageError(error)
             }
         }
     }
 
-    @ViewBuilder
-    private func deepSeekRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(.body.monospacedDigit())
-        }
+    private func usageError(_ error: String) -> some View {
+        Label(error, systemImage: "xmark.circle.fill")
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .lineLimit(3)
+            .help(error)
     }
 
     // MARK: - Helpers
+
+    private static func deepSeekCostText(_ amount: Double?) -> String {
+        amount.map { String(format: "¥%.2f", $0) } ?? "Unavailable"
+    }
 
     private static let absoluteTimeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -323,16 +342,6 @@ struct CombinedMenuContentView: View {
         }
     }
 
-    private static let numberFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        return f
-    }()
-
-    private static func commaNum(_ value: Int) -> String {
-        Self.numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
-    }
-
     private static func percentString(_ value: Double?) -> String {
         guard let value else { return "Unknown" }
         return "\(Int(value.rounded()))% remaining"
@@ -340,6 +349,13 @@ struct CombinedMenuContentView: View {
 
     private static func hasDisplayableClaudeExtraUsage(_ extra: ClaudeExtraUsage) -> Bool {
         extra.usedCredits > 0 || (extra.monthlyLimit ?? 0) > 0
+    }
+
+    private static func claudeMoneyString(_ amount: ClaudeMoneyAmount) -> String {
+        let majorAmount = amount.amountMinor / pow(10, Double(amount.exponent))
+        let currency = amount.currency.uppercased()
+        let prefix = currency == "USD" ? "$" : "\(currency) "
+        return String(format: "%@%.*f", prefix, amount.exponent, majorAmount)
     }
 }
 

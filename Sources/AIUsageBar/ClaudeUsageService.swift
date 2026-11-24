@@ -141,9 +141,10 @@ actor ClaudeUsageService {
         )
     }
 
-    private func makeSnapshot(from response: ClaudeUsageResponse) -> ClaudeUsageSnapshot {
+    func makeSnapshot(from response: ClaudeUsageResponse) -> ClaudeUsageSnapshot {
         let fiveHour = self.parseWindow(response.fiveHour)
         let sevenDay = self.parseWindow(response.sevenDay)
+        let fableWeekly = self.parseFableWeeklyLimit(response.limits)
 
         var extraUsage: ClaudeExtraUsage?
         if let eu = response.extraUsage, eu.isEnabled == true {
@@ -155,11 +156,45 @@ actor ClaudeUsageService {
             )
         }
 
+        let creditBalance: ClaudeMoneyAmount?
+        if let balance = response.spend?.balance,
+           balance.amountMinor > 0,
+           balance.exponent >= 0,
+           !balance.currency.isEmpty
+        {
+            creditBalance = ClaudeMoneyAmount(
+                amountMinor: balance.amountMinor,
+                currency: balance.currency,
+                exponent: balance.exponent
+            )
+        } else {
+            creditBalance = nil
+        }
+
         return ClaudeUsageSnapshot(
             refreshedAt: Date(),
             fiveHour: fiveHour,
             sevenDay: sevenDay,
-            extraUsage: extraUsage
+            fableWeekly: fableWeekly,
+            extraUsage: extraUsage,
+            creditBalance: creditBalance
+        )
+    }
+
+    private func parseFableWeeklyLimit(
+        _ limits: [ClaudeUsageResponse.LimitPayload]?
+    ) -> ClaudeRateLimitWindow? {
+        guard let payload = limits?.first(where: {
+            $0.kind == "weekly_scoped"
+                && $0.scope?.model?.displayName?.caseInsensitiveCompare("Fable") == .orderedSame
+        }), let utilization = payload.percent else {
+            return nil
+        }
+
+        let resetsAt = payload.resetsAt.flatMap { self.iso8601Formatter.date(from: $0) }
+        return ClaudeRateLimitWindow(
+            utilization: utilization,
+            resetsAt: resetsAt
         )
     }
 

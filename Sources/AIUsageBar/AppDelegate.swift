@@ -7,9 +7,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let codexModel = AppModel()
     let claudeModel = ClaudeModel()
     let deepSeekModel = DeepSeekModel()
+    let antigravityModel = AntigravityModel()
+    let grokModel = GrokModel()
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let popover = NSPopover()
+    private lazy var popover = Self.makeUsagePopover(content: CombinedMenuContentView(
+        claudeModel: self.claudeModel,
+        codexModel: self.codexModel,
+        deepSeekModel: self.deepSeekModel,
+        antigravityModel: self.antigravityModel,
+        grokModel: self.grokModel,
+        openSettings: { [weak self] in self?.openSettingsWindow() }
+    ))
     private var settingsWindow: NSWindow?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -20,26 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.setActivationPolicy(.accessory)
         }
 
-        self.configurePopover()
         self.configureStatusItem()
         self.bindStatusItemUpdates()
         self.updateStatusItemImage()
-    }
-
-    private func configurePopover() {
-        self.popover.behavior = .transient
-        let controller = NSHostingController(
-            rootView: CombinedMenuContentView(
-                claudeModel: self.claudeModel,
-                codexModel: self.codexModel,
-                deepSeekModel: self.deepSeekModel,
-                openSettings: { [weak self] in
-                    self?.openSettingsWindow()
-                }
-            )
-        )
-        self.popover.contentViewController = controller
-        self.popover.contentSize = NSSize(width: 300, height: 360)
     }
 
     private func configureStatusItem() {
@@ -48,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         button.imagePosition = .imageOnly
+        button.setAccessibilityLabel("AI Usage Bar")
 
         let clickView = StatusItemClickView { [weak self] in
             self?.togglePopoverFromStatusItem()
@@ -58,6 +51,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func bindStatusItemUpdates() {
+        // Settings changes redraw the cached data without making a network request.
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification, object: UserDefaults.standard)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.updateStatusItemImage()
+                }
+            }
+            .store(in: &self.cancellables)
+
         self.claudeModel.objectWillChange
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
@@ -74,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &self.cancellables)
 
-        self.deepSeekModel.objectWillChange
+        Publishers.Merge3(self.deepSeekModel.objectWillChange, self.antigravityModel.objectWillChange, self.grokModel.objectWillChange)
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
                     self?.updateStatusItemImage()
@@ -84,46 +86,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatusItemImage() {
-        var services: [ServiceIconData] = []
+        let enabled = Set([
+            self.claudeModel.isEnabled ? ProviderID.claude : nil,
+            self.codexModel.isEnabled ? .codex : nil,
+            self.deepSeekModel.isEnabled ? .deepSeek : nil,
+            self.antigravityModel.isEnabled ? .antigravity : nil,
+            self.grokModel.isEnabled ? .grok : nil,
+        ].compactMap { $0 })
+        let hasThirdParty = self.antigravityModel.snapshot?.windows.contains { $0.pool == .thirdParty } ?? false
+        let services = MenuBarMeter.visibleMeters(enabled: enabled, hasAntigravityThirdPartyQuota: hasThirdParty).map { meter in
+            switch meter {
+            case .provider(let provider):
+                self.iconData(for: provider)
+            case .antigravityThirdParty:
+                self.antigravityIconData(windows: self.antigravityModel.menuThirdParty, color: NSColor(hex: "#D0AAFF"))
+            }
+        }
+        self.statusItem.button?.image = services.isEmpty
+            ? NSImage(systemSymbolName: "chart.bar", accessibilityDescription: "AI Usage Bar")
+            : MenuBarIconView(services: services, showsNumbers: AppSettings.showMenuBarNumbers()).renderedImage()
+    }
 
-        let claudeRing = NSColor(hex: AppSettings.claudeRingColorHex)
-            ?? NSColor(red: 0.85, green: 0.45, blue: 0.34, alpha: 1.0)
-        let codexRing = NSColor(hex: AppSettings.codexRingColorHex)
-            ?? NSColor.white
-        let deepSeekRing = NSColor(hex: AppSettings.deepSeekRingColorHex)
-            ?? NSColor(red: 0.275, green: 0.549, blue: 0.980, alpha: 1.0)
-
-        if self.claudeModel.isEnabled {
-            services.append(ServiceIconData(
+    private func iconData(for provider: ProviderID) -> ServiceIconData {
+        switch provider {
+        case .claude:
+            return ServiceIconData(
                 ringFraction: self.claudeModel.menuBarFiveHourRemainingFraction,
                 topText: self.claudeModel.menuBarFiveHourRemainingText,
                 bottomText: self.claudeModel.menuBarWeeklyRemainingText,
-                ringColor: claudeRing
-            ))
-        }
-
-        if self.codexModel.isEnabled {
-            services.append(ServiceIconData(
+                ringColor: provider.ringColor()
+            )
+        case .codex:
+            return ServiceIconData(
                 ringFraction: self.codexModel.menuBarFiveHourRemainingFraction,
                 topText: self.codexModel.menuBarFiveHourRemainingText,
                 bottomText: self.codexModel.menuBarWeeklyRemainingText,
-                ringColor: codexRing
-            ))
-        }
-
-        if self.deepSeekModel.isEnabled {
-            services.append(ServiceIconData(
+                ringColor: provider.ringColor()
+            )
+        case .antigravity:
+            return self.antigravityIconData(windows: self.antigravityModel.menuGemini, color: provider.ringColor())
+        case .grok:
+            let window = self.grokModel.snapshot?.window
+            return ServiceIconData(
+                ringFraction: window?.remainingFraction ?? 0,
+                topText: window?.percentageText ?? "--%",
+                bottomText: "",
+                ringColor: provider.ringColor()
+            )
+        case .deepSeek:
+            return ServiceIconData(
                 ringFraction: self.deepSeekModel.menuBarRingFraction,
                 topText: self.deepSeekModel.menuBarTopText,
                 bottomText: self.deepSeekModel.menuBarBottomText,
-                ringColor: deepSeekRing,
+                ringColor: provider.ringColor(),
                 centerSymbol: self.deepSeekModel.menuBarCenterSymbol
-            ))
+            )
         }
+    }
 
-        self.statusItem.button?.image = services.isEmpty
-            ? nil
-            : MenuBarIconView(services: services).renderedImage()
+    private func antigravityIconData(windows: AntigravityQuotaSnapshot.MenuWindows, color: NSColor?) -> ServiceIconData {
+        ServiceIconData(
+            ringFraction: (windows.fiveHours ?? windows.weekly)?.remainingFraction ?? 0,
+            topText: windows.fiveHours?.percentageText ?? "--%",
+            bottomText: windows.weekly?.percentageText ?? "--%",
+            ringColor: color
+        )
     }
 
     private func togglePopoverFromStatusItem() {
@@ -137,10 +164,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if self.popover.isShown {
             self.popover.performClose(button)
         } else {
+            Self.fitUsagePopover(self.popover)
             self.popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             self.popover.contentViewController?.view.window?.makeKey()
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    private static let usagePopoverWidth: CGFloat = 300
+
+    static func makeUsagePopover(content: some View) -> NSPopover {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let root = content
+            .frame(width: self.usagePopoverWidth)
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { [weak popover] height in
+                if let popover { self.setUsagePopoverHeight(height, on: popover) }
+            }
+        let controller = NSHostingController(rootView: AnyView(root))
+        controller.sizingOptions = []
+        popover.contentViewController = controller
+        self.fitUsagePopover(popover)
+        return popover
+    }
+
+    private static func fitUsagePopover(_ popover: NSPopover) {
+        guard let controller = popover.contentViewController as? NSHostingController<AnyView> else { return }
+        let size = controller.sizeThatFits(in: NSSize(width: self.usagePopoverWidth, height: .infinity))
+        self.setUsagePopoverHeight(size.height, on: popover)
+    }
+
+    private static func setUsagePopoverHeight(_ height: CGFloat, on popover: NSPopover) {
+        guard height.isFinite, height > 0 else { return }
+        let size = NSSize(width: self.usagePopoverWidth, height: height.rounded(.up))
+        if popover.contentSize != size { popover.contentSize = size }
     }
 
     private func openSettingsWindow() {
@@ -154,21 +212,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsWindowSize = NSSize(width: 520, height: 670)
-        let settingsView = SettingsView(model: self.codexModel, claudeModel: self.claudeModel, deepSeekModel: self.deepSeekModel)
-        let hostingController = NSHostingController(
-            rootView: settingsView.frame(width: settingsWindowSize.width, height: settingsWindowSize.height)
-        )
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: settingsWindowSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hostingController
-        window.title = "AI Usage Bar Settings"
-        window.isReleasedWhenClosed = false
+        let settingsView = SettingsView(model: self.codexModel, claudeModel: self.claudeModel, deepSeekModel: self.deepSeekModel,
+                                        antigravityModel: self.antigravityModel, grokModel: self.grokModel)
+        let window = Self.makeSettingsWindow(content: settingsView)
         window.center()
 
         NSApp.setActivationPolicy(.regular)
@@ -187,6 +233,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         self.settingsWindow = window
+    }
+
+    static func makeSettingsWindow(content: SettingsView) -> NSWindow {
+        let settingsWindowSize = NSSize(width: 740, height: 670)
+        let hostingController = NSHostingController(rootView: content)
+        // The resizable window owns its bounds, not the current SwiftUI page.
+        hostingController.sizingOptions = []
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: settingsWindowSize),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = hostingController
+        window.contentMinSize = NSSize(width: 700, height: 420)
+        window.setContentSize(settingsWindowSize)
+        window.title = "AI Usage Bar Settings"
+        window.isReleasedWhenClosed = false
+        return window
     }
 }
 

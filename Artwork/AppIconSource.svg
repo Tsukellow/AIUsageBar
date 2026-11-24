@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" >
+<defs>
+<linearGradient id="ai-usage-bar-paper" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="1024"><stop stop-color="#F3F6F9"/><stop offset="1" stop-color="#E5ECF2"/></linearGradient>
+<linearGradient id="ai-usage-bar-ink" gradientUnits="userSpaceOnUse" x1="512" y1="212" x2="512" y2="812"><stop stop-color="#1f8593"/><stop offset="1" stop-color="#167c8a"/></linearGradient>
+</defs>
+<rect width="1024" height="1024" fill="url(#ai-usage-bar-paper)"/>
+<rect x="224" y="324" width="576" height="92" rx="46" fill="url(#ai-usage-bar-ink)"/>
+<rect x="224" y="466" width="442" height="92" rx="46" fill="url(#ai-usage-bar-ink)"/>
+<rect x="224" y="608" width="308" height="92" rx="46" fill="url(#ai-usage-bar-ink)"/>
+</svg>

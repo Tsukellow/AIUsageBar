@@ -9,11 +9,8 @@ final class DeepSeekModel: ObservableObject {
 
     @Published var isEnabled: Bool {
         didSet {
+            guard self.isEnabled != oldValue else { return }
             AppSettings.deepSeekEnabled = self.isEnabled
-            if !self.isEnabled && !AppSettings.claudeEnabled && !AppSettings.codexEnabled {
-                self.isEnabled = true
-                return
-            }
             if self.isEnabled {
                 self.startLoop()
                 self.refreshNow()
@@ -27,6 +24,7 @@ final class DeepSeekModel: ObservableObject {
     private let initialRefreshDelaySeconds: Double
     private let initialRefreshDueAt: Date
     private var refreshTask: Task<Void, Never>?
+    private let refreshWork = ProviderRefreshWork()
     private var scheduledResetRefreshTask: Task<Void, Never>?
 
     init() {
@@ -51,7 +49,7 @@ final class DeepSeekModel: ObservableObject {
             initialDelaySeconds: self.initialRefreshDelaySeconds,
             refreshIntervalSeconds: { AppSettings.refreshIntervalSeconds }
         ) { [weak self] in
-            await self?.refresh()
+            await self?.requestRefresh()?.value
         }
     }
 
@@ -60,6 +58,8 @@ final class DeepSeekModel: ObservableObject {
         self.refreshTask = nil
         self.scheduledResetRefreshTask?.cancel()
         self.scheduledResetRefreshTask = nil
+        self.refreshWork.cancel()
+        self.isRefreshing = false
         self.snapshot = nil
         self.errorMessage = nil
     }
@@ -67,14 +67,13 @@ final class DeepSeekModel: ObservableObject {
     // MARK: - Menu bar properties
 
     var menuBarRingFraction: Double {
-        guard let balance = self.snapshot?.balance, balance > 0 else { return 0 }
-        let threshold = AppSettings.deepSeekBalanceThreshold
-        return min(balance / threshold, 1.0)
+        guard let balance = self.snapshot?.balance else { return 0 }
+        return AppSettings.deepSeekBalanceSettings().ringFraction(for: balance)
     }
 
     var menuBarTopText: String {
-        guard let snapshot = self.snapshot else { return "--" }
-        return String(format: "%.2f", snapshot.todayCost)
+        guard let todayCost = self.snapshot?.todayCost else { return "--" }
+        return String(format: "%.2f", todayCost)
     }
 
     var menuBarBottomText: String {
@@ -84,9 +83,7 @@ final class DeepSeekModel: ObservableObject {
 
     var menuBarCenterSymbol: CenterSymbol? {
         guard let snapshot = self.snapshot else { return nil }
-        let threshold = AppSettings.deepSeekBalanceThreshold
-        let warnAt = threshold * 0.1
-        return snapshot.balance > warnAt ? .checkmark : .exclamation
+        return AppSettings.deepSeekBalanceSettings().isLowBalance(snapshot.balance) ? .exclamation : .checkmark
     }
 
     var pendingInitialRefreshDueAt: Date? {
@@ -103,14 +100,19 @@ final class DeepSeekModel: ObservableObject {
     // MARK: - Actions
 
     func refreshNow() {
-        Task {
-            await self.refresh()
+        _ = self.requestRefresh()
+    }
+
+    private func requestRefresh() -> Task<Void, Never>? {
+        guard self.isEnabled else { return nil }
+        return self.refreshWork.start { [weak self] generation in
+            await self?.refresh(generation: generation)
         }
     }
 
     // MARK: - Refresh
 
-    private func refresh() async {
+    private func refresh(generation: Int) async {
         let token = AppSettings.deepSeekBearerToken
         guard !token.isEmpty else {
             self.scheduledResetRefreshTask?.cancel()
@@ -121,13 +123,17 @@ final class DeepSeekModel: ObservableObject {
         guard !self.isRefreshing else { return }
 
         self.isRefreshing = true
-        defer { self.isRefreshing = false }
+        defer {
+            if generation == self.refreshWork.generation { self.isRefreshing = false }
+        }
 
         do {
             let snap = try await self.service.fetchSnapshot()
+            guard !Task.isCancelled, generation == self.refreshWork.generation else { return }
             self.snapshot = snap
             self.errorMessage = nil
         } catch {
+            guard !Task.isCancelled, generation == self.refreshWork.generation else { return }
             self.errorMessage = error.localizedDescription
         }
     }

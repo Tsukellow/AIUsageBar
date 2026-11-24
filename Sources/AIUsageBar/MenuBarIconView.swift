@@ -26,6 +26,7 @@ struct ServiceIconData {
 @MainActor
 struct MenuBarIconView {
     let services: [ServiceIconData]
+    let showsNumbers: Bool
 
     // MARK: - Layout constants
 
@@ -54,7 +55,7 @@ struct MenuBarIconView {
         let hasColors = self.services.contains { $0.ringColor != nil }
         let baseColor: NSColor = .white
 
-        let blocks = self.services.map { Self.measureBlock($0) }
+        let blocks = self.services.map { Self.measureBlock($0, showsNumbers: self.showsNumbers) }
         let totalWidth = blocks.reduce(CGFloat(0)) { $0 + $1.width }
             + CGFloat(max(0, blocks.count - 1)) * Self.sectionGap
 
@@ -64,17 +65,18 @@ struct MenuBarIconView {
         ) { _ in
             var x: CGFloat = 0
             for (i, block) in blocks.enumerated() {
-                Self.drawBlock(block, at: x, baseColor: baseColor)
+                Self.drawBlock(block, at: x, baseColor: baseColor, showsNumbers: self.showsNumbers)
                 x += block.width
                 if i < blocks.count - 1 {
-                    let sepX = x + Self.sectionGap / 2
-                    let sepPath = NSBezierPath()
-                    sepPath.move(to: NSPoint(x: sepX, y: Self.iconHeight * 0.2))
-                    sepPath.line(to: NSPoint(x: sepX, y: Self.iconHeight * 0.8))
-                    sepPath.lineWidth = 0.5
-                    baseColor.withAlphaComponent(0.25).setStroke()
-                    sepPath.stroke()
-
+                    if self.showsNumbers {
+                        let sepX = x + Self.sectionGap / 2
+                        let sepPath = NSBezierPath()
+                        sepPath.move(to: NSPoint(x: sepX, y: Self.iconHeight * 0.2))
+                        sepPath.line(to: NSPoint(x: sepX, y: Self.iconHeight * 0.8))
+                        sepPath.lineWidth = 0.5
+                        baseColor.withAlphaComponent(0.25).setStroke()
+                        sepPath.stroke()
+                    }
                     x += Self.sectionGap
                 }
             }
@@ -94,7 +96,10 @@ struct MenuBarIconView {
         let width: CGFloat
     }
 
-    private static func measureBlock(_ data: ServiceIconData) -> MeasuredBlock {
+    private static func measureBlock(_ data: ServiceIconData, showsNumbers: Bool) -> MeasuredBlock {
+        guard showsNumbers else {
+            return MeasuredBlock(data: data, topSize: .zero, bottomSize: .zero, width: self.ringDiameter)
+        }
         let topSize = (data.topText as NSString).size(withAttributes: self.topAttrs)
         let bottomSize = (data.bottomText as NSString).size(withAttributes: self.bottomAttrs)
         let textWidth = max(topSize.width, bottomSize.width)
@@ -102,7 +107,7 @@ struct MenuBarIconView {
         return MeasuredBlock(data: data, topSize: topSize, bottomSize: bottomSize, width: blockWidth)
     }
 
-    private static func drawBlock(_ block: MeasuredBlock, at originX: CGFloat, baseColor: NSColor) {
+    private static func drawBlock(_ block: MeasuredBlock, at originX: CGFloat, baseColor: NSColor, showsNumbers: Bool) {
         let ringColor = block.data.ringColor ?? baseColor
 
         // Ring
@@ -137,7 +142,8 @@ struct MenuBarIconView {
             Self.drawSymbol(symbol, at: center, color: ringColor)
         }
 
-        // Texts
+        guard showsNumbers else { return }
+
         let topAttrs: [NSAttributedString.Key: Any] = [
             .font: self.topFont,
             .foregroundColor: baseColor,
@@ -183,13 +189,14 @@ struct MenuBarIconView {
             top.lineWidth = 1.8
             top.lineCapStyle = .round
             top.stroke()
-            // Bottom dot
-            let dot = NSBezierPath()
-            dot.move(to: NSPoint(x: center.x, y: center.y + 1.5))
-            dot.line(to: NSPoint(x: center.x, y: center.y + 3))
-            dot.lineWidth = 1.8
-            dot.lineCapStyle = .round
-            dot.stroke()
+            // A filled circle stays round; a stroked segment becomes a capsule.
+            let diameter: CGFloat = 2.2
+            let dot = NSBezierPath(ovalIn: NSRect(
+                x: center.x - diameter / 2, y: center.y + 2,
+                width: diameter, height: diameter
+            ))
+            color.setFill()
+            dot.fill()
         }
     }
 }

@@ -4,11 +4,15 @@ struct ClaudeUsageSnapshot: Sendable, UsageSnapshotResets {
     let refreshedAt: Date
     let fiveHour: ClaudeRateLimitWindow?
     let sevenDay: ClaudeRateLimitWindow?
+    /// Weekly model-scoped usage for Fable, shown only in the dropdown.
+    let fableWeekly: ClaudeRateLimitWindow?
     /// Extra usage info from the API (Pro plan add-on credits).
     let extraUsage: ClaudeExtraUsage?
+    /// Prepaid usage credit balance, when returned by the API and greater than zero.
+    let creditBalance: ClaudeMoneyAmount?
 
     var resetDates: [Date?] {
-        [fiveHour?.resetsAt, sevenDay?.resetsAt]
+        [fiveHour?.resetsAt, sevenDay?.resetsAt, fableWeekly?.resetsAt]
     }
 }
 
@@ -21,6 +25,14 @@ struct ClaudeExtraUsage: Sendable {
     let usedCredits: Double
     /// Utilization percentage if available.
     let utilization: Double?
+}
+
+struct ClaudeMoneyAmount: Sendable {
+    /// Amount in the currency's minor unit (for example, cents for USD).
+    let amountMinor: Double
+    let currency: String
+    /// Number of decimal places used to convert the minor amount.
+    let exponent: Int
 }
 
 struct ClaudeRateLimitWindow: Sendable {
@@ -40,12 +52,16 @@ struct ClaudeRateLimitWindow: Sendable {
 struct ClaudeUsageResponse: Decodable, Sendable {
     let fiveHour: WindowPayload?
     let sevenDay: WindowPayload?
+    let limits: [LimitPayload]?
     let extraUsage: ExtraUsagePayload?
+    let spend: SpendPayload?
 
     private enum CodingKeys: String, CodingKey {
         case fiveHour = "five_hour"
         case sevenDay = "seven_day"
+        case limits
         case extraUsage = "extra_usage"
+        case spend
     }
 
     struct WindowPayload: Decodable, Sendable {
@@ -55,6 +71,32 @@ struct ClaudeUsageResponse: Decodable, Sendable {
         private enum CodingKeys: String, CodingKey {
             case utilization
             case resetsAt = "resets_at"
+        }
+    }
+
+    struct LimitPayload: Decodable, Sendable {
+        let kind: String?
+        let percent: Double?
+        let resetsAt: String?
+        let scope: ScopePayload?
+
+        private enum CodingKeys: String, CodingKey {
+            case kind
+            case percent
+            case resetsAt = "resets_at"
+            case scope
+        }
+
+        struct ScopePayload: Decodable, Sendable {
+            let model: ModelPayload?
+        }
+
+        struct ModelPayload: Decodable, Sendable {
+            let displayName: String?
+
+            private enum CodingKeys: String, CodingKey {
+                case displayName = "display_name"
+            }
         }
     }
 
@@ -69,6 +111,31 @@ struct ClaudeUsageResponse: Decodable, Sendable {
             case monthlyLimit = "monthly_limit"
             case usedCredits = "used_credits"
             case utilization
+        }
+    }
+
+    struct SpendPayload: Decodable, Sendable {
+        let balance: MoneyPayload?
+
+        private enum CodingKeys: String, CodingKey {
+            case balance
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.balance = try? container.decode(MoneyPayload.self, forKey: .balance)
+        }
+    }
+
+    struct MoneyPayload: Decodable, Sendable {
+        let amountMinor: Double
+        let currency: String
+        let exponent: Int
+
+        private enum CodingKeys: String, CodingKey {
+            case amountMinor = "amount_minor"
+            case currency
+            case exponent
         }
     }
 }
