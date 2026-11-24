@@ -34,7 +34,6 @@ struct SettingsView: View {
     @AppStorage(AppSettings.refreshIntervalKey) private var refreshIntervalSeconds = AppSettings.defaultRefreshIntervalSeconds
     @AppStorage(AppSettings.initialRefreshDelaySecondsKey) private var initialRefreshDelaySeconds = AppSettings.defaultInitialRefreshDelaySeconds
     @AppStorage(AppSettings.showMenuBarNumbersKey) private var showMenuBarNumbers = AppSettings.defaultShowMenuBarNumbers
-    @AppStorage(AppSettings.menuBarRingStyleKey) private var menuBarRingStyle = AppSettings.defaultMenuBarRingStyle
     @AppStorage(AppSettings.antigravityThirdPartyDisplayKey) private var antigravityThirdPartyDisplay = AppSettings.defaultAntigravityThirdPartyDisplay
     @AppStorage(AppSettings.claudeSessionCookieKey) private var claudeSessionCookie = ""
     @AppStorage(AppSettings.deepSeekBearerTokenKey) private var deepSeekBearerToken = ""
@@ -159,24 +158,10 @@ struct SettingsView: View {
 
             self.settingsSection(title: "Menu Bar", systemImage: "menubar.rectangle") {
                 self.settingsCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Show numbers in the menu bar", isOn: self.$showMenuBarNumbers)
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Turn off for rings only. Numbers stay visible in the drop-down.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-
-                        Divider()
-                        Picker("Quota rings", selection: self.$menuBarRingStyle) {
-                            Text("Single ring").tag(MenuBarRingStyle.single)
-                            Text("Dual rings").tag(MenuBarRingStyle.dual)
-                        }
-                        Text("For Claude, Codex, and Antigravity: inner ring shows 5-hour remaining; outer ring shows weekly remaining.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                    Toggle("Show numbers in the menu bar", isOn: self.$showMenuBarNumbers)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -268,7 +253,7 @@ struct SettingsView: View {
 
             self.connectionSettings(
                 method: "Codex sign-in",
-                instructions: "Sign in to Codex first, then choose **Refresh Now**. AI Usage Bar uses the existing local session; there’s nothing to paste here."
+                instructions: "Sign in to Codex, then choose **Refresh Now**."
             )
             self.providerStatus(enabled: self.model.isEnabled, refreshing: self.model.isRefreshing,
                                 error: self.model.errorMessage,
@@ -288,7 +273,7 @@ struct SettingsView: View {
 
             self.connectionSettings(
                 method: "Bearer Token",
-                instructions: "Sign in at **platform.deepseek.com**. Open the browser’s developer tools, select **Console**, and run the command below. Paste and save the returned dashboard token, not an API key."
+                instructions: "Sign in at **platform.deepseek.com**. Run the command below in the browser’s **Console**, then paste and save the returned dashboard token."
             ) {
                 Text(verbatim: "JSON.parse(localStorage.getItem('userToken')).value")
                     .font(.callout.monospaced())
@@ -378,13 +363,10 @@ struct SettingsView: View {
             self.trackingSettings(ProviderID.antigravity.displayName, provider: .antigravity, enabled: self.$antigravityModel.isEnabled)
             self.connectionSettings(
                 method: "Antigravity CLI",
-                instructions: "Sign in to `agy`, choose **Connect Status Line**, then open a new `agy` session. Use `/usage` there to refresh the quota snapshot."
+                instructions: "Sign in to `agy`, choose **Connect Status Line**, then reopen `agy`. Run `/usage` to refresh."
             ) {
-                HStack {
-                    Button("Connect Status Line") { self.antigravityModel.connect() }
-                        .disabled(!self.antigravityModel.isEnabled)
-                    Link("Setup Guide", destination: URL(string: "https://antigravity.google/docs/cli/statusline/")!)
-                }
+                Button("Connect Status Line") { self.antigravityModel.connect() }
+                    .disabled(!self.antigravityModel.isEnabled)
             }
             self.providerStatus(enabled: self.antigravityModel.isEnabled, refreshing: false,
                                 error: self.antigravityModel.errorMessage,
@@ -401,7 +383,7 @@ struct SettingsView: View {
             self.trackingSettings("Grok", provider: .grok, enabled: self.$grokModel.isEnabled)
             self.connectionSettings(
                 method: "Grok Build CLI",
-                instructions: "Install Grok Build, run `grok login` in Terminal, then choose **Refresh Now**. If the CLI isn’t found automatically, choose its executable below."
+                instructions: "Install Grok Build, run `grok login` in Terminal, then choose **Refresh Now**."
             ) {
                 LabeledContent("Executable", value: self.grokModel.executablePath.isEmpty ? "Automatic" : self.grokModel.executablePath)
                     .lineLimit(2)
@@ -416,10 +398,6 @@ struct SettingsView: View {
                     }
                     Button("Use Automatic") { self.grokModel.setExecutablePath("") }
                         .disabled(self.grokModel.executablePath.isEmpty)
-                }
-                HStack {
-                    Link("Setup Guide", destination: URL(string: "https://docs.x.ai/build/overview")!)
-                    Link("Open Grok Usage", destination: URL(string: "https://grok.com/dashboard")!)
                 }
             }
             self.providerStatus(enabled: self.grokModel.isEnabled, refreshing: self.grokModel.isRefreshing,

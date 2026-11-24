@@ -104,8 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.statusItem.button?.image = services.isEmpty
             ? NSImage(systemSymbolName: "chart.bar", accessibilityDescription: "AI Usage Bar")
-            : MenuBarIconView(services: services, showsNumbers: AppSettings.showMenuBarNumbers(),
-                              ringStyle: AppSettings.menuBarRingStyle()).renderedImage()
+            : MenuBarIconView(services: services, showsNumbers: AppSettings.showMenuBarNumbers()).renderedImage()
     }
 
     private func iconData(for provider: ProviderID) -> ServiceIconData {

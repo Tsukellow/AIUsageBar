@@ -9,7 +9,7 @@ enum CenterSymbol {
 /// Data for one service's ring + text block in the menu bar.
 struct ServiceIconData {
     struct QuotaRings: Equatable {
-        let fiveHour: Double?
+        let fiveHour: Double
         let weekly: Double
     }
 
@@ -48,7 +48,7 @@ struct ServiceIconData {
             topText: fiveHour.map(self.percentageText) ?? "",
             bottomText: self.percentageText(weekly),
             ringColor: ringColor,
-            quotaRings: QuotaRings(fiveHour: fiveHour.map { $0 / 100 }, weekly: weekly / 100)
+            quotaRings: fiveHour.map { QuotaRings(fiveHour: $0 / 100, weekly: weekly / 100) }
         )
     }
 
@@ -95,20 +95,12 @@ struct ServiceIconData {
 struct MenuBarIconView {
     let services: [ServiceIconData]
     let showsNumbers: Bool
-    let ringStyle: MenuBarRingStyle
-
-    init(services: [ServiceIconData], showsNumbers: Bool, ringStyle: MenuBarRingStyle = .single) {
-        self.services = services
-        self.showsNumbers = showsNumbers
-        self.ringStyle = ringStyle
-    }
 
     // MARK: - Layout constants
 
     private static let ringDiameter: CGFloat = 18
     private static let ringLineWidth: CGFloat = 2.0
-    private static let dualRingLineWidth: CGFloat = 1.5
-    private static let innerRingInset: CGFloat = 3
+    private static let innerRingInset: CGFloat = 3.5
     private static let weeklyRingAlpha: CGFloat = 0.78
     private static let textGap: CGFloat = 4
     private static let sectionGap: CGFloat = 8
@@ -144,7 +136,7 @@ struct MenuBarIconView {
         ) { _ in
             var x: CGFloat = 0
             for (i, block) in blocks.enumerated() {
-                Self.drawBlock(block, at: x, baseColor: baseColor, showsNumbers: self.showsNumbers, ringStyle: self.ringStyle)
+                Self.drawBlock(block, at: x, baseColor: baseColor, showsNumbers: self.showsNumbers)
                 x += block.width
                 if i < blocks.count - 1 {
                     if self.showsNumbers {
@@ -188,21 +180,18 @@ struct MenuBarIconView {
     }
 
     private static func drawBlock(_ block: MeasuredBlock, at originX: CGFloat, baseColor: NSColor,
-                                  showsNumbers: Bool, ringStyle: MenuBarRingStyle) {
+                                  showsNumbers: Bool) {
         let ringColor = block.data.ringColor ?? baseColor
 
         let center = NSPoint(x: originX + self.ringDiameter / 2, y: self.iconHeight / 2)
-        if ringStyle == .dual, let quota = block.data.quotaRings {
-            let radius = (self.ringDiameter - self.dualRingLineWidth) / 2
-            Self.drawRing(at: center, radius: radius, lineWidth: self.dualRingLineWidth,
+        let radius = (self.ringDiameter - self.ringLineWidth) / 2
+        if let quota = block.data.quotaRings {
+            Self.drawRing(at: center, radius: radius, lineWidth: self.ringLineWidth,
                           fraction: quota.weekly, color: ringColor, progressAlpha: self.weeklyRingAlpha)
-            // A reported zero keeps its track; nil means this window does not apply.
-            if let fiveHour = quota.fiveHour {
-                Self.drawRing(at: center, radius: radius - self.innerRingInset, lineWidth: self.dualRingLineWidth,
-                              fraction: fiveHour, color: ringColor)
-            }
+            Self.drawRing(at: center, radius: radius - self.innerRingInset, lineWidth: self.ringLineWidth,
+                          fraction: quota.fiveHour, color: ringColor)
         } else {
-            Self.drawRing(at: center, radius: (self.ringDiameter - self.ringLineWidth) / 2,
+            Self.drawRing(at: center, radius: radius,
                           lineWidth: self.ringLineWidth, fraction: block.data.ringFraction, color: ringColor)
         }
 

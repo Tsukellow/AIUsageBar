@@ -3,17 +3,6 @@ import XCTest
 @testable import AIUsageBar
 
 final class MenuBarIconTests: XCTestCase {
-    func testRingStyleDefaultsToSingleAndRespectsDualPreference() throws {
-        let suite = "AIUsageBarTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertEqual(AppSettings.menuBarRingStyle(in: defaults), .single)
-        defaults.set(MenuBarRingStyle.dual.rawValue, forKey: AppSettings.menuBarRingStyleKey)
-        XCTAssertEqual(AppSettings.menuBarRingStyle(in: defaults), .dual)
-        defaults.set("unknown-style", forKey: AppSettings.menuBarRingStyleKey)
-        XCTAssertEqual(AppSettings.menuBarRingStyle(in: defaults), .single)
-    }
-
     func testNumbersAreOnByDefaultAndCanBeTurnedOff() throws {
         let name = "AIUsageBarTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
@@ -164,23 +153,23 @@ final class MenuBarIconTests: XCTestCase {
     }
 
     @MainActor
-    func testDualRingsUseBothQuotasWithoutNumbersAndKeepTheSameSize() throws {
+    func testBothQuotasAutomaticallyRenderDualRingsWithoutNumbers() throws {
         let base = ServiceIconData.claude(fiveHour: 35, weekly: 82, ringColor: .systemOrange)
         let lessWeekly = ServiceIconData.claude(fiveHour: 35, weekly: 42, ringColor: .systemOrange)
         let moreFiveHour = ServiceIconData.claude(fiveHour: 64, weekly: 82, ringColor: .systemOrange)
-        func image(_ icon: ServiceIconData, ringStyle: MenuBarRingStyle) -> NSImage {
-            MenuBarIconView(services: [icon], showsNumbers: false, ringStyle: ringStyle).renderedImage()
+        func image(_ icon: ServiceIconData) -> NSImage {
+            MenuBarIconView(services: [icon], showsNumbers: false).renderedImage()
         }
 
-        let dual = image(base, ringStyle: .dual)
+        let dual = image(base)
         XCTAssertEqual(dual.size, NSSize(width: 18, height: 22))
-        XCTAssertEqual(image(base, ringStyle: .single).size, dual.size)
-        XCTAssertEqual(try XCTUnwrap(image(base, ringStyle: .single).tiffRepresentation),
-                       try XCTUnwrap(image(lessWeekly, ringStyle: .single).tiffRepresentation))
+        let single = ServiceIconData(ringFraction: 0.35, topText: "", bottomText: "", ringColor: .systemOrange)
+        XCTAssertEqual(image(single).size, dual.size)
+        XCTAssertNotEqual(try XCTUnwrap(dual.tiffRepresentation), try XCTUnwrap(image(single).tiffRepresentation))
         XCTAssertNotEqual(try XCTUnwrap(dual.tiffRepresentation),
-                          try XCTUnwrap(image(lessWeekly, ringStyle: .dual).tiffRepresentation))
+                          try XCTUnwrap(image(lessWeekly).tiffRepresentation))
         XCTAssertNotEqual(try XCTUnwrap(dual.tiffRepresentation),
-                          try XCTUnwrap(image(moreFiveHour, ringStyle: .dual).tiffRepresentation))
+                          try XCTUnwrap(image(moreFiveHour).tiffRepresentation))
     }
 
     @MainActor
@@ -193,16 +182,16 @@ final class MenuBarIconTests: XCTestCase {
         }
         let weeklyOnly = icon(fiveHour: nil)
         let exhausted = icon(fiveHour: 0)
-        XCTAssertEqual(weeklyOnly.quotaRings, .init(fiveHour: nil, weekly: 0.74))
+        XCTAssertNil(weeklyOnly.quotaRings)
         XCTAssertEqual(exhausted.quotaRings, .init(fiveHour: 0, weekly: 0.74))
-        let outerOnly = MenuBarIconView(services: [weeklyOnly], showsNumbers: false, ringStyle: .dual).renderedImage()
-        let withEmptyInner = MenuBarIconView(services: [exhausted], showsNumbers: false, ringStyle: .dual).renderedImage()
-        XCTAssertEqual(outerOnly.size, withEmptyInner.size)
-        XCTAssertNotEqual(try XCTUnwrap(outerOnly.tiffRepresentation), try XCTUnwrap(withEmptyInner.tiffRepresentation))
+        let single = MenuBarIconView(services: [weeklyOnly], showsNumbers: false).renderedImage()
+        let withEmptyInner = MenuBarIconView(services: [exhausted], showsNumbers: false).renderedImage()
+        XCTAssertEqual(single.size, withEmptyInner.size)
+        XCTAssertNotEqual(try XCTUnwrap(single.tiffRepresentation), try XCTUnwrap(withEmptyInner.tiffRepresentation))
     }
 
     @MainActor
-    func testAntigravityUsesTheTwoWindowsAndDualStyleLeavesSpecialStatesAndSingleMetricsAlone() throws {
+    func testOnlyCompleteSupportedQuotaPairsUseDualRings() {
         let weekly = SubscriptionWindow(title: "Weekly", remainingFraction: 0.92, resetsAt: nil)
         let fiveHour = SubscriptionWindow(title: "5 hours", remainingFraction: 0.63, resetsAt: nil)
         let fresh = ServiceIconData.antigravity(windows: .init(fiveHours: fiveHour, weekly: weekly),
@@ -217,9 +206,6 @@ final class MenuBarIconTests: XCTestCase {
         ]
         for icon in variants {
             XCTAssertNil(icon.quotaRings)
-            let single = MenuBarIconView(services: [icon], showsNumbers: true, ringStyle: .single).renderedImage()
-            let dual = MenuBarIconView(services: [icon], showsNumbers: true, ringStyle: .dual).renderedImage()
-            XCTAssertEqual(try XCTUnwrap(single.tiffRepresentation), try XCTUnwrap(dual.tiffRepresentation))
         }
     }
 
