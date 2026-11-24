@@ -132,21 +132,10 @@ struct SettingsView: View {
         self.settingsScrollView {
             self.settingsSection(title: "Startup", systemImage: "power") {
                 self.settingsCard {
-                    HStack {
-                        Text("Launch at login")
-                        Spacer()
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { self.loginManager.isEnabled },
-                                set: { self.loginManager.setEnabled($0) }
-                            )
-                        )
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    SettingsToggleRow(title: "Launch at login", isOn: Binding(
+                        get: { self.loginManager.isEnabled },
+                        set: { self.loginManager.setEnabled($0) }
+                    ))
                 }
 
                 if let message = self.loginManager.errorMessage, !message.isEmpty {
@@ -158,19 +147,16 @@ struct SettingsView: View {
 
             self.settingsSection(title: "Menu Bar", systemImage: "menubar.rectangle") {
                 self.settingsCard {
-                    Toggle("Show numbers in the menu bar", isOn: self.$showMenuBarNumbers)
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    SettingsToggleRow(title: "Show numbers in the menu bar", isOn: self.$showMenuBarNumbers)
                 }
             }
 
             self.settingsSection(title: "Refresh", systemImage: "arrow.clockwise") {
                 self.settingsCard {
                     VStack(alignment: .leading, spacing: 16) {
-                        HStack(spacing: 12) {
-                            Text("Interval")
-                            Spacer(minLength: 12)
+                        SettingsControlRow {
+                            Text("Interval").accessibilityHidden(true)
+                        } control: {
                             Picker("Interval", selection: self.$refreshIntervalSeconds) {
                                 ForEach(AppSettings.refreshIntervalMinutes, id: \.self) { minutes in
                                     Text("\(minutes) min").tag(Double(minutes * 60))
@@ -180,12 +166,11 @@ struct SettingsView: View {
                             .pickerStyle(.segmented)
                             .frame(width: 260, alignment: .trailing)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack {
+                            SettingsControlRow {
                                 Text("Initial sync delay")
-                                Spacer()
+                            } control: {
                                 Text(Formatting.duration(seconds: Int(self.initialRefreshDelaySeconds.rounded())))
                                     .foregroundStyle(.secondary)
                             }
@@ -205,13 +190,13 @@ struct SettingsView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
+                            .accessibilityLabel("Initial sync delay")
 
                             Text("Applies on next app launch.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -325,6 +310,7 @@ struct SettingsView: View {
                 if provider == .antigravity {
                     VStack(spacing: 12) {
                         RingColorPicker(title: AntigravityQuotaSnapshot.Pool.gemini.title, appearance: provider.ringAppearance)
+                        Divider()
                         RingColorPicker(title: AntigravityQuotaSnapshot.Pool.thirdParty.title, appearance: .antigravityThirdParty)
                     }
                 } else {
@@ -338,14 +324,15 @@ struct SettingsView: View {
         self.settingsSection(title: "Tracking and display", systemImage: "power") {
             self.settingsCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    Toggle("\(name) usage tracking", isOn: enabled)
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
+                    SettingsToggleRow(title: "\(name) usage tracking", isOn: enabled)
+                    Divider()
                     ProviderDisplayPicker(provider: provider,
                                           title: provider == .antigravity ? AntigravityQuotaSnapshot.Pool.gemini.title : "Show usage in")
                         .disabled(!enabled.wrappedValue)
                     if provider == .antigravity {
-                        Picker(AntigravityQuotaSnapshot.Pool.thirdParty.title, selection: self.$antigravityThirdPartyDisplay) {
+                        Divider()
+                        SettingsMenuRow(title: AntigravityQuotaSnapshot.Pool.thirdParty.title,
+                                        selection: self.$antigravityThirdPartyDisplay) {
                             Text("Do not show").tag(AntigravityThirdPartyDisplay.hidden)
                             Text("Drop-down only").tag(AntigravityThirdPartyDisplay.menuOnly)
                             Text("Menu bar and drop-down").tag(AntigravityThirdPartyDisplay.menuBarAndMenu)
@@ -353,7 +340,6 @@ struct SettingsView: View {
                         .disabled(!enabled.wrappedValue)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -365,8 +351,10 @@ struct SettingsView: View {
                 method: "Antigravity CLI",
                 instructions: "Sign in to `agy`, choose **Connect Status Line**, then reopen `agy`. Run `/usage` to refresh."
             ) {
-                Button("Connect Status Line") { self.antigravityModel.connect() }
-                    .disabled(!self.antigravityModel.isEnabled)
+                SettingsActionRow {
+                    Button("Connect Status Line") { self.antigravityModel.connect() }
+                        .disabled(!self.antigravityModel.isEnabled)
+                }
             }
             self.providerStatus(enabled: self.antigravityModel.isEnabled, refreshing: false,
                                 error: self.antigravityModel.errorMessage,
@@ -385,9 +373,18 @@ struct SettingsView: View {
                 method: "Grok Build CLI",
                 instructions: "Install Grok Build, run `grok login` in Terminal, then choose **Refresh Now**."
             ) {
-                LabeledContent("Executable", value: self.grokModel.executablePath.isEmpty ? "Automatic" : self.grokModel.executablePath)
-                    .lineLimit(2)
-                HStack {
+                SettingsControlRow {
+                    Text("Executable").fixedSize(horizontal: true, vertical: false)
+                } control: {
+                    Text(self.grokModel.executablePath.isEmpty ? "Automatic" : self.grokModel.executablePath)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                        .truncationMode(.middle)
+                        .lineLimit(2)
+                }
+                SettingsActionRow {
+                    Button("Use Automatic") { self.grokModel.setExecutablePath("") }
+                        .disabled(self.grokModel.executablePath.isEmpty)
                     Button("Choose Executable…") {
                         let panel = NSOpenPanel()
                         panel.canChooseDirectories = false
@@ -396,8 +393,6 @@ struct SettingsView: View {
                             self.grokModel.setExecutablePath(url.path)
                         }
                     }
-                    Button("Use Automatic") { self.grokModel.setExecutablePath("") }
-                        .disabled(self.grokModel.executablePath.isEmpty)
                 }
             }
             self.providerStatus(enabled: self.grokModel.isEnabled, refreshing: self.grokModel.isRefreshing,
@@ -420,7 +415,6 @@ struct SettingsView: View {
                     Text(instructions).font(.footnote).foregroundStyle(.secondary)
                     content()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -432,18 +426,19 @@ struct SettingsView: View {
                 .lineLimit(3...5)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 11, design: .monospaced))
-            HStack {
-                Button("Save") {
-                    saved.wrappedValue = draft.wrappedValue
-                    didSave()
-                }
-                .disabled(!enabled || draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .frame(maxWidth: .infinity)
+            SettingsActionRow {
                 if !saved.wrappedValue.isEmpty {
                     Button("Clear", role: .destructive) {
                         draft.wrappedValue = ""
                         saved.wrappedValue = ""
                     }
                 }
+                Button("Save") {
+                    saved.wrappedValue = draft.wrappedValue
+                    didSave()
+                }
+                .disabled(!enabled || draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
@@ -453,7 +448,7 @@ struct SettingsView: View {
                                 refreshTitle: String = "Refresh Now", refresh: @escaping () -> Void) -> some View {
         self.settingsSection(title: "Status", systemImage: "info.circle") {
             self.settingsCard {
-                HStack(spacing: 12) {
+                SettingsControlRow {
                     if !enabled {
                         Text("Tracking is off").foregroundStyle(.secondary)
                     } else if refreshing {
@@ -466,12 +461,11 @@ struct SettingsView: View {
                     } else {
                         Text(message).foregroundStyle(.secondary)
                     }
-                    Spacer()
+                } control: {
                     Button(refreshTitle, action: refresh)
                         .fixedSize()
                         .disabled(!enabled || refreshing || !canRefresh)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -501,12 +495,69 @@ struct SettingsView: View {
     @ViewBuilder
     private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
                 Color.primary.opacity(0.035),
                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
+    }
+}
+
+struct SettingsControlRow<Caption: View, Control: View>: View {
+    @ViewBuilder let caption: () -> Caption
+    @ViewBuilder let control: () -> Control
+
+    var body: some View {
+        HStack(spacing: 12) {
+            self.caption()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            self.control()
+        }
+    }
+}
+
+private struct SettingsActionRow<Actions: View>: View {
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        HStack(spacing: 8, content: self.actions)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+}
+
+private struct SettingsToggleRow: View {
+    let title: LocalizedStringKey
+    @Binding var isOn: Bool
+
+    var body: some View {
+        SettingsControlRow {
+            Text(self.title).accessibilityHidden(true)
+        } control: {
+            Toggle(self.title, isOn: self.$isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .fixedSize()
+        }
+    }
+}
+
+private struct SettingsMenuRow<Selection: Hashable, Options: View>: View {
+    let title: String
+    @Binding var selection: Selection
+    @ViewBuilder let options: () -> Options
+
+    var body: some View {
+        SettingsControlRow {
+            Text(self.title).accessibilityHidden(true)
+        } control: {
+            Picker(self.title, selection: self.$selection, content: self.options)
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 185, alignment: .trailing)
+        }
     }
 }
 
@@ -520,7 +571,7 @@ private struct ProviderDisplayPicker: View {
     }
 
     var body: some View {
-        Picker(self.title, selection: self.$placement) {
+        SettingsMenuRow(title: self.title, selection: self.$placement) {
             Text("Drop-down only").tag(ProviderDisplay.menuOnly)
             Text("Menu bar and drop-down").tag(ProviderDisplay.menuBarAndMenu)
         }
@@ -539,19 +590,22 @@ private struct RingColorPicker: View {
     }
 
     var body: some View {
-        HStack {
-            ColorPicker(self.title, selection: Binding(
-                get: { Color(nsColor: self.appearance.color(override: self.hex)) },
-                set: { color in
-                    if let rgb = NSColor(color).usingColorSpace(.sRGB) { self.hex = rgb.toHex() }
-                }
-            ), supportsOpacity: false)
-
-            Spacer()
-            Button("Restore Default") { self.hex = "" }
-                .disabled(self.hex.isEmpty)
-                .accessibilityLabel("Restore default color for \(self.title)")
+        SettingsControlRow {
+            Text(self.title).accessibilityHidden(true)
+        } control: {
+            HStack(spacing: 8) {
+                ColorPicker(self.title, selection: Binding(
+                    get: { Color(nsColor: self.appearance.color(override: self.hex)) },
+                    set: { color in
+                        if let rgb = NSColor(color).usingColorSpace(.sRGB) { self.hex = rgb.toHex() }
+                    }
+                ), supportsOpacity: false)
+                .labelsHidden()
+                .fixedSize()
+                Button("Restore Default") { self.hex = "" }
+                    .disabled(self.hex.isEmpty)
+                    .accessibilityLabel("Restore default color for \(self.title)")
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

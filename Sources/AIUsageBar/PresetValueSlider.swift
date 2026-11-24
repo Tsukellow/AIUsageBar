@@ -17,9 +17,9 @@ struct PresetValueSlider: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            SettingsControlRow {
                 Text(self.title)
-                Spacer()
+            } control: {
                 Text(self.format(self.value)).foregroundStyle(.secondary)
             }
             Slider(

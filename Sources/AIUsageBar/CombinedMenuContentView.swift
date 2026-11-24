@@ -100,10 +100,6 @@ struct CombinedMenuContentView: View {
                 let pools = snapshot.displayedPools(thirdPartyDisplay: self.antigravityThirdPartyDisplay)
                 if pools.isEmpty {
                     Text("No Antigravity quota to display.").font(.footnote).foregroundStyle(.secondary)
-                } else if self.antigravityModel.isStale {
-                    Text("Last known usage. Open the Antigravity CLI for a new snapshot.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
                 ForEach(pools, id: \.self) { pool in
                     let windows = snapshot.windows.filter { $0.pool == pool }
