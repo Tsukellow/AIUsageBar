@@ -31,7 +31,7 @@ struct SettingsView: View {
     @ObservedObject private var loginManager: LaunchAtLoginManager
     @Environment(\.colorScheme) private var colorScheme
 
-    @AppStorage(AppSettings.refreshIntervalKey) private var refreshIntervalSeconds = 300.0
+    @AppStorage(AppSettings.refreshIntervalKey) private var refreshIntervalSeconds = AppSettings.defaultRefreshIntervalSeconds
     @AppStorage(AppSettings.initialRefreshDelaySecondsKey) private var initialRefreshDelaySeconds = AppSettings.defaultInitialRefreshDelaySeconds
     @AppStorage(AppSettings.showMenuBarNumbersKey) private var showMenuBarNumbers = AppSettings.defaultShowMenuBarNumbers
     @AppStorage(AppSettings.antigravityThirdPartyDisplayKey) private var antigravityThirdPartyDisplay = AppSettings.defaultAntigravityThirdPartyDisplay
@@ -177,9 +177,9 @@ struct SettingsView: View {
                             Text("Interval")
                             Spacer(minLength: 12)
                             Picker("Interval", selection: self.$refreshIntervalSeconds) {
-                                Text("1 minute").tag(60.0)
-                                Text("5 minutes").tag(300.0)
-                                Text("15 minutes").tag(900.0)
+                                ForEach(AppSettings.refreshIntervalMinutes, id: \.self) { minutes in
+                                    Text("\(minutes) min").tag(Double(minutes * 60))
+                                }
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)

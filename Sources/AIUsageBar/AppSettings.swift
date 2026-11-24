@@ -67,6 +67,8 @@ enum MenuBarMeter: Equatable {
 
 enum AppSettings {
     static let refreshIntervalKey = "refreshIntervalSeconds"
+    static let refreshIntervalMinutes = [1, 3, 5, 10, 15]
+    static let defaultRefreshIntervalSeconds = 300.0
     static let initialRefreshDelaySecondsKey = "initialRefreshDelaySeconds"
     static let defaultInitialRefreshDelaySeconds = 60.0
     static let showMenuBarNumbersKey = "showMenuBarNumbers"
@@ -86,7 +88,7 @@ enum AppSettings {
     static var refreshIntervalSeconds: Double {
         let defaults = UserDefaults.standard
         if defaults.object(forKey: self.refreshIntervalKey) == nil {
-            defaults.set(300.0, forKey: self.refreshIntervalKey)
+            defaults.set(self.defaultRefreshIntervalSeconds, forKey: self.refreshIntervalKey)
         }
         return defaults.double(forKey: self.refreshIntervalKey)
     }
