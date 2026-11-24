@@ -51,7 +51,14 @@ final class DeepSeekMonthlyCostTests: XCTestCase {
         XCTAssertEqual(fromDays.monthlyCost, 2.25)
     }
 
-    private func snapshot(costData: Any, costStatus: Int = 200) async throws -> DeepSeekUsageSnapshot {
+    func testMissingWalletIsDifferentFromReportedZero() async throws {
+        let missing = try await self.snapshot(costData: [:], walletBalance: nil)
+        XCTAssertNil(missing.balance)
+        let zero = try await self.snapshot(costData: [:], walletBalance: "0.00")
+        XCTAssertEqual(zero.balance, 0)
+    }
+
+    private func snapshot(costData: Any, costStatus: Int = 200, walletBalance: String? = "42.00") async throws -> DeepSeekUsageSnapshot {
         let previousToken = AppSettings.deepSeekBearerToken
         AppSettings.deepSeekBearerToken = "test-token"
         defer { AppSettings.deepSeekBearerToken = previousToken }
@@ -69,7 +76,7 @@ final class DeepSeekMonthlyCostTests: XCTestCase {
                     "data": [
                         "biz_code": 0,
                         "biz_data": [
-                            "normal_wallets": [["balance": "42.00"]],
+                            "normal_wallets": walletBalance.map { [["balance": $0]] } ?? [],
                             "bonus_wallets": [],
                             "total_costs": [["currency": "CNY", "amount": "16.09"]],
                         ],

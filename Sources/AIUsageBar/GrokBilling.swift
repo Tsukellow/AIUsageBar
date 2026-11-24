@@ -5,6 +5,11 @@ struct GrokUsageSnapshot: Sendable {
     let window: SubscriptionWindow?
     let prepaidCents: Int?
     let refreshedAt: Date
+    private let periodKind: PeriodKind?
+
+    var weeklyWindow: SubscriptionWindow? {
+        self.periodKind == .weekly ? self.window : nil
+    }
 
     var prepaidText: String? {
         guard let prepaidCents = self.prepaidCents, prepaidCents > 0 else { return nil }
@@ -15,9 +20,10 @@ struct GrokUsageSnapshot: Sendable {
         let payload = try JSONDecoder().decode(Billing.self, from: data)
         let config = payload.config
         let period = config?.currentPeriod
-        let title = switch period?.type {
-        case "USAGE_PERIOD_TYPE_WEEKLY": "Weekly"
-        case "USAGE_PERIOD_TYPE_MONTHLY": "Monthly"
+        let kind = period?.type.flatMap(PeriodKind.init(rawValue:))
+        let title = switch kind {
+        case .weekly: "Weekly"
+        case .monthly: "Monthly"
         default: "Subscription quota"
         }
         let end = SubscriptionUsage.date(period?.end) ?? SubscriptionUsage.date(config?.billingPeriodEnd)
@@ -27,7 +33,12 @@ struct GrokUsageSnapshot: Sendable {
         let storedBalance = config?.prepaidBalance?.val
         let balance = storedBalance.flatMap { $0 >= 0 ? $0 : nil }
         guard window != nil || balance != nil else { throw GrokBillingError.noUsage }
-        return Self(window: window, prepaidCents: balance, refreshedAt: refreshedAt)
+        return Self(window: window, prepaidCents: balance, refreshedAt: refreshedAt, periodKind: kind)
+    }
+
+    private enum PeriodKind: String, Sendable {
+        case weekly = "USAGE_PERIOD_TYPE_WEEKLY"
+        case monthly = "USAGE_PERIOD_TYPE_MONTHLY"
     }
 
     private struct Billing: Decodable {

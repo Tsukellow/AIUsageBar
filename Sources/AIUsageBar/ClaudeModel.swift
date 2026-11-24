@@ -64,43 +64,6 @@ final class ClaudeModel: ObservableObject {
         self.errorMessage = nil
     }
 
-    // MARK: - Menu bar properties
-
-    var menuBarFiveHourRemainingPercent: Double? {
-        guard let remaining = self.snapshot?.fiveHour?.remainingPercent else {
-            return nil
-        }
-        return min(100, max(0, remaining))
-    }
-
-    var menuBarFiveHourRemainingText: String {
-        guard let remaining = self.menuBarFiveHourRemainingPercent else {
-            return "--%"
-        }
-        return "\(Int(remaining.rounded()))%"
-    }
-
-    var menuBarWeeklyRemainingPercent: Double? {
-        guard let remaining = self.snapshot?.sevenDay?.remainingPercent else {
-            return nil
-        }
-        return min(100, max(0, remaining))
-    }
-
-    var menuBarWeeklyRemainingText: String {
-        guard let remaining = self.menuBarWeeklyRemainingPercent else {
-            return "--%"
-        }
-        return "\(Int(remaining.rounded()))%"
-    }
-
-    var menuBarFiveHourRemainingFraction: Double {
-        guard let remaining = self.menuBarFiveHourRemainingPercent else {
-            return 0
-        }
-        return remaining / 100
-    }
-
     var pendingInitialRefreshDueAt: Date? {
         guard self.snapshot == nil,
               !self.isRefreshing,

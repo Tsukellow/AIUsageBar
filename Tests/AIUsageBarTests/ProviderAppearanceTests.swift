@@ -39,4 +39,22 @@ final class ProviderAppearanceTests: XCTestCase {
             XCTAssertGreaterThan((mark + 0.05) / (dark + 0.05), 4.5, provider.displayName)
         }
     }
+
+    func testAntigravityPoolColorsCanBeSetAndRestoredIndependently() throws {
+        let suite = "AIUsageBarTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let gemini = ProviderID.antigravity.ringAppearance
+        let partner = RingAppearance.antigravityThirdParty
+        XCTAssertNotEqual(gemini.key, partner.key)
+        XCTAssertEqual(partner.color(in: defaults).toHex(), "#D0AAFF")
+        defaults.set("#11AABB", forKey: gemini.key)
+        defaults.set("#AABB11", forKey: partner.key)
+        XCTAssertEqual(gemini.color(in: defaults).toHex(), "#11AABB")
+        XCTAssertEqual(partner.color(in: defaults).toHex(), "#AABB11")
+        defaults.set("", forKey: partner.key)
+        XCTAssertEqual(partner.color(in: defaults).toHex(), "#D0AAFF")
+        XCTAssertEqual(gemini.color(in: defaults).toHex(), "#11AABB")
+    }
 }

@@ -99,43 +99,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .provider(let provider):
                 self.iconData(for: provider)
             case .antigravityThirdParty:
-                self.antigravityIconData(windows: self.antigravityModel.menuThirdParty, color: NSColor(hex: "#D0AAFF"))
+                self.antigravityIconData(windows: self.antigravityModel.menuThirdParty, color: RingAppearance.antigravityThirdParty.color())
             }
         }
         self.statusItem.button?.image = services.isEmpty
             ? NSImage(systemSymbolName: "chart.bar", accessibilityDescription: "AI Usage Bar")
-            : MenuBarIconView(services: services, showsNumbers: AppSettings.showMenuBarNumbers()).renderedImage()
+            : MenuBarIconView(services: services, showsNumbers: AppSettings.showMenuBarNumbers(),
+                              ringStyle: AppSettings.menuBarRingStyle()).renderedImage()
     }
 
     private func iconData(for provider: ProviderID) -> ServiceIconData {
         switch provider {
         case .claude:
-            return ServiceIconData(
-                ringFraction: self.claudeModel.menuBarFiveHourRemainingFraction,
-                topText: self.claudeModel.menuBarFiveHourRemainingText,
-                bottomText: self.claudeModel.menuBarWeeklyRemainingText,
-                ringColor: provider.ringColor()
-            )
+            let snapshot = self.claudeModel.errorMessage == nil ? self.claudeModel.snapshot : nil
+            return .claude(fiveHour: snapshot?.fiveHour?.remainingPercent,
+                           weekly: snapshot?.sevenDay?.remainingPercent, ringColor: provider.ringColor())
         case .codex:
-            return .codex(rateLimits: self.codexModel.snapshot?.rateLimits, ringColor: provider.ringColor())
+            let limits = self.codexModel.errorMessage == nil ? self.codexModel.snapshot?.rateLimits : nil
+            return .codex(rateLimits: limits, ringColor: provider.ringColor())
         case .antigravity:
             return self.antigravityIconData(windows: self.antigravityModel.menuGemini, color: provider.ringColor())
         case .grok:
-            let window = self.grokModel.snapshot?.window
-            return ServiceIconData(
-                ringFraction: window?.remainingFraction ?? 0,
-                topText: window?.percentageText ?? "--%",
-                bottomText: "",
-                ringColor: provider.ringColor()
-            )
+            return .grok(weekly: self.grokModel.snapshot?.weeklyWindow, ringColor: provider.ringColor())
         case .deepSeek:
-            return ServiceIconData(
-                ringFraction: self.deepSeekModel.menuBarRingFraction,
-                topText: self.deepSeekModel.menuBarTopText,
-                bottomText: self.deepSeekModel.menuBarBottomText,
-                ringColor: provider.ringColor(),
-                centerSymbol: self.deepSeekModel.menuBarCenterSymbol
-            )
+            let snapshot = self.deepSeekModel.errorMessage == nil ? self.deepSeekModel.snapshot : nil
+            return .deepSeek(balance: snapshot?.balance, todayCost: snapshot?.todayCost,
+                             settings: AppSettings.deepSeekBalanceSettings(), ringColor: provider.ringColor())
         }
     }
 

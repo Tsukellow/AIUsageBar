@@ -1,12 +1,31 @@
 import AppKit
 
+struct RingAppearance {
+    let key: String
+    let defaultHex: String
+
+    static let antigravityThirdParty = Self(key: "antigravityThirdPartyRingColorHex", defaultHex: "#D0AAFF")
+
+    func color(override: String?) -> NSColor {
+        NSColor(hex: override) ?? NSColor(hex: self.defaultHex) ?? .white
+    }
+
+    func color(in defaults: UserDefaults = .standard) -> NSColor {
+        self.color(override: defaults.string(forKey: self.key))
+    }
+}
+
 extension ProviderID {
+    var ringAppearance: RingAppearance {
+        RingAppearance(key: self.ringColorKey, defaultHex: self.defaultRingColorHex)
+    }
+
     func ringColor(override: String?) -> NSColor {
-        NSColor(hex: override) ?? NSColor(hex: self.defaultRingColorHex) ?? .white
+        self.ringAppearance.color(override: override)
     }
 
     func ringColor(in defaults: UserDefaults = .standard) -> NSColor {
-        self.ringColor(override: defaults.string(forKey: self.ringColorKey))
+        self.ringAppearance.color(in: defaults)
     }
 
     func sidebarIconName(dark: Bool) -> String {

@@ -6,7 +6,9 @@ A macOS menu bar app for checking **Claude, Codex, Antigravity, Grok, and DeepSe
 
 - Independent tracking and display settings for each provider: drop-down only, or menu bar and drop-down. The app keeps a menu entry even when no provider uses the menu bar.
 - **Settings → General → Menu Bar** can hide the numbers beside all menu-bar rings. Usage details in the drop-down are unchanged.
+- **Quota rings** defaults to a single ring. The dual-ring option adds a weekly outer ring and a five-hour inner ring to Claude, Codex, and Antigravity. Codex shows only the outer ring when it reports just weekly usage.
 - Each provider has its own menu-bar ring color, with a default and a restore button. The Settings sidebar uses locally packaged [provider icons](Artwork/ProviderIcons/SOURCES.md).
+- Antigravity's Gemini and Claude/GPT rings have independent colors. Menu-bar weekly figures use muted text; a ring with `?` indicates missing required data without displaying figures.
 - Claude and Codex usage windows and reset information when available from the provider.
 - Antigravity's five-hour and weekly quota pools and Grok's subscription window, with reset times when reported. Grok prepaid credits appear separately in the drop-down when the balance is greater than zero.
 - DeepSeek balance tracking with preset full-ring amounts (¥5–¥1000) and low-balance warnings (1%–20%). Settings update the menu bar immediately.

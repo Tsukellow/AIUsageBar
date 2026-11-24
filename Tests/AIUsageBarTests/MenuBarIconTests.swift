@@ -3,6 +3,17 @@ import XCTest
 @testable import AIUsageBar
 
 final class MenuBarIconTests: XCTestCase {
+    func testRingStyleDefaultsToSingleAndRespectsDualPreference() throws {
+        let suite = "AIUsageBarTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(AppSettings.menuBarRingStyle(in: defaults), .single)
+        defaults.set(MenuBarRingStyle.dual.rawValue, forKey: AppSettings.menuBarRingStyleKey)
+        XCTAssertEqual(AppSettings.menuBarRingStyle(in: defaults), .dual)
+        defaults.set("unknown-style", forKey: AppSettings.menuBarRingStyleKey)
+        XCTAssertEqual(AppSettings.menuBarRingStyle(in: defaults), .single)
+    }
+
     func testNumbersAreOnByDefaultAndCanBeTurnedOff() throws {
         let name = "AIUsageBarTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
@@ -35,8 +46,12 @@ final class MenuBarIconTests: XCTestCase {
         XCTAssertEqual(both.ringFraction, 0)
 
         let missing = ServiceIconData.codex(rateLimits: nil, ringColor: .white)
-        XCTAssertEqual(missing.topText, "--%")
-        XCTAssertEqual(missing.bottomText, "--%")
+        XCTAssertEqual(missing.centerSymbol, .questionMark)
+        let missingWeekly = icon(fiveHour: 59, weekly: nil)
+        XCTAssertEqual(missingWeekly.centerSymbol, .questionMark)
+        XCTAssertTrue(missingWeekly.topText.isEmpty)
+        XCTAssertTrue(missingWeekly.bottomText.isEmpty)
+        XCTAssertEqual(missingWeekly.ringFraction, 0)
     }
 
     @MainActor
@@ -79,11 +94,133 @@ final class MenuBarIconTests: XCTestCase {
         XCTAssertTrue(stale.topText.isEmpty)
         XCTAssertTrue(stale.bottomText.isEmpty)
         XCTAssertEqual(stale.centerSymbol, .exclamation)
+        XCTAssertEqual(ServiceIconData.antigravity(windows: .init(), isStale: true, ringColor: nil).centerSymbol, .exclamation)
 
         let withNumbers = MenuBarIconView(services: [stale], showsNumbers: true).renderedImage()
         let withoutNumbers = MenuBarIconView(services: [stale], showsNumbers: false).renderedImage()
         XCTAssertEqual(withNumbers.size, NSSize(width: 18, height: 22))
         XCTAssertEqual(try XCTUnwrap(withNumbers.tiffRepresentation), try XCTUnwrap(withoutNumbers.tiffRepresentation))
+    }
+
+    @MainActor
+    func testMissingDataUsesAQuestionMarkWithoutNumberSpace() throws {
+        let week = SubscriptionWindow(title: "Weekly", remainingFraction: 0.8, resetsAt: nil)
+        let settings = DeepSeekBalanceSettings(fullBalance: 50, warningPercent: 10)
+        let variants: [ServiceIconData] = [
+            .claude(fiveHour: nil, weekly: 80, ringColor: .systemOrange),
+            .claude(fiveHour: 60, weekly: nil, ringColor: .systemOrange),
+            .codex(rateLimits: nil, ringColor: .white),
+            .antigravity(windows: .init(weekly: week), isStale: false, ringColor: .systemBlue),
+            .antigravity(windows: .init(fiveHours: week), isStale: false, ringColor: .systemPurple),
+            .grok(weekly: nil, ringColor: .systemGray),
+            .deepSeek(balance: nil, todayCost: 1, settings: settings, ringColor: .systemBlue),
+            .deepSeek(balance: 2.5, todayCost: nil, settings: settings, ringColor: .systemBlue),
+        ]
+        for icon in variants {
+            XCTAssertEqual(icon.centerSymbol, .questionMark)
+            XCTAssertEqual(icon.ringFraction, 0)
+            XCTAssertTrue(icon.topText.isEmpty)
+            XCTAssertTrue(icon.bottomText.isEmpty)
+            XCTAssertEqual(MenuBarIconView(services: [icon], showsNumbers: true).renderedImage().size,
+                           NSSize(width: 18, height: 22))
+        }
+        let unknown = MenuBarIconView(services: [variants[0]], showsNumbers: false).renderedImage()
+        let ring = ServiceIconData(ringFraction: 0, topText: "", bottomText: "", ringColor: variants[0].ringColor)
+        let empty = MenuBarIconView(services: [ring], showsNumbers: false).renderedImage()
+        XCTAssertNotEqual(try XCTUnwrap(unknown.tiffRepresentation), try XCTUnwrap(empty.tiffRepresentation))
+    }
+
+    @MainActor
+    func testReportedZeroRemainsAValidNumber() {
+        let claude = ServiceIconData.claude(fiveHour: 0, weekly: 0, ringColor: nil)
+        XCTAssertEqual(claude.topText, "0%")
+        XCTAssertEqual(claude.bottomText, "0%")
+        XCTAssertNil(claude.centerSymbol)
+
+        let week = SubscriptionWindow(title: "Weekly", remainingFraction: 0, resetsAt: nil)
+        let grok = ServiceIconData.grok(weekly: week, ringColor: nil)
+        XCTAssertTrue(grok.topText.isEmpty)
+        XCTAssertEqual(grok.bottomText, "0%")
+        XCTAssertNil(grok.centerSymbol)
+
+        let deepSeek = ServiceIconData.deepSeek(balance: 0, todayCost: 0,
+                                              settings: DeepSeekBalanceSettings(fullBalance: 50, warningPercent: 10),
+                                              ringColor: nil)
+        XCTAssertEqual(deepSeek.topText, "0.00")
+        XCTAssertEqual(deepSeek.bottomText, "0.00")
+        XCTAssertEqual(deepSeek.centerSymbol, .exclamation)
+    }
+
+    @MainActor
+    func testGrokAndCodexRenderTheSameWeeklyOnlyLabel() throws {
+        let week = SubscriptionWindow(title: "Weekly", remainingFraction: 0.74, resetsAt: nil)
+        let limits = RateLimitSnapshot(fiveHourRemainingPercent: nil, fiveHourResetsAt: nil,
+                                       weeklyRemainingPercent: 74, weeklyResetsAt: nil,
+                                       creditsRemaining: nil, sourceLabel: "Test")
+        let grok = MenuBarIconView(services: [.grok(weekly: week, ringColor: .white)], showsNumbers: true).renderedImage()
+        let codex = MenuBarIconView(services: [.codex(rateLimits: limits, ringColor: .white)], showsNumbers: true).renderedImage()
+        XCTAssertEqual(grok.size, codex.size)
+        XCTAssertEqual(try XCTUnwrap(grok.tiffRepresentation), try XCTUnwrap(codex.tiffRepresentation))
+    }
+
+    @MainActor
+    func testDualRingsUseBothQuotasWithoutNumbersAndKeepTheSameSize() throws {
+        let base = ServiceIconData.claude(fiveHour: 35, weekly: 82, ringColor: .systemOrange)
+        let lessWeekly = ServiceIconData.claude(fiveHour: 35, weekly: 42, ringColor: .systemOrange)
+        let moreFiveHour = ServiceIconData.claude(fiveHour: 64, weekly: 82, ringColor: .systemOrange)
+        func image(_ icon: ServiceIconData, ringStyle: MenuBarRingStyle) -> NSImage {
+            MenuBarIconView(services: [icon], showsNumbers: false, ringStyle: ringStyle).renderedImage()
+        }
+
+        let dual = image(base, ringStyle: .dual)
+        XCTAssertEqual(dual.size, NSSize(width: 18, height: 22))
+        XCTAssertEqual(image(base, ringStyle: .single).size, dual.size)
+        XCTAssertEqual(try XCTUnwrap(image(base, ringStyle: .single).tiffRepresentation),
+                       try XCTUnwrap(image(lessWeekly, ringStyle: .single).tiffRepresentation))
+        XCTAssertNotEqual(try XCTUnwrap(dual.tiffRepresentation),
+                          try XCTUnwrap(image(lessWeekly, ringStyle: .dual).tiffRepresentation))
+        XCTAssertNotEqual(try XCTUnwrap(dual.tiffRepresentation),
+                          try XCTUnwrap(image(moreFiveHour, ringStyle: .dual).tiffRepresentation))
+    }
+
+    @MainActor
+    func testWeeklyOnlyCodexOmitsTheInnerRingButReportedZeroKeepsIt() throws {
+        func icon(fiveHour: Double?) -> ServiceIconData {
+            let limits = RateLimitSnapshot(fiveHourRemainingPercent: fiveHour, fiveHourResetsAt: nil,
+                                           weeklyRemainingPercent: 74, weeklyResetsAt: nil,
+                                           creditsRemaining: nil, sourceLabel: "Test")
+            return .codex(rateLimits: limits, ringColor: .white)
+        }
+        let weeklyOnly = icon(fiveHour: nil)
+        let exhausted = icon(fiveHour: 0)
+        XCTAssertEqual(weeklyOnly.quotaRings, .init(fiveHour: nil, weekly: 0.74))
+        XCTAssertEqual(exhausted.quotaRings, .init(fiveHour: 0, weekly: 0.74))
+        let outerOnly = MenuBarIconView(services: [weeklyOnly], showsNumbers: false, ringStyle: .dual).renderedImage()
+        let withEmptyInner = MenuBarIconView(services: [exhausted], showsNumbers: false, ringStyle: .dual).renderedImage()
+        XCTAssertEqual(outerOnly.size, withEmptyInner.size)
+        XCTAssertNotEqual(try XCTUnwrap(outerOnly.tiffRepresentation), try XCTUnwrap(withEmptyInner.tiffRepresentation))
+    }
+
+    @MainActor
+    func testAntigravityUsesTheTwoWindowsAndDualStyleLeavesSpecialStatesAndSingleMetricsAlone() throws {
+        let weekly = SubscriptionWindow(title: "Weekly", remainingFraction: 0.92, resetsAt: nil)
+        let fiveHour = SubscriptionWindow(title: "5 hours", remainingFraction: 0.63, resetsAt: nil)
+        let fresh = ServiceIconData.antigravity(windows: .init(fiveHours: fiveHour, weekly: weekly),
+                                               isStale: false, ringColor: .systemBlue)
+        XCTAssertEqual(fresh.quotaRings, .init(fiveHour: 0.63, weekly: 0.92))
+
+        let variants: [ServiceIconData] = [
+            .antigravity(windows: .init(fiveHours: fiveHour, weekly: weekly), isStale: true, ringColor: .systemBlue),
+            .claude(fiveHour: nil, weekly: 82, ringColor: .systemOrange),
+            .grok(weekly: weekly, ringColor: .systemGray),
+            .deepSeek(balance: 2.50, todayCost: 1.28, settings: .init(fullBalance: 50, warningPercent: 10), ringColor: .systemBlue),
+        ]
+        for icon in variants {
+            XCTAssertNil(icon.quotaRings)
+            let single = MenuBarIconView(services: [icon], showsNumbers: true, ringStyle: .single).renderedImage()
+            let dual = MenuBarIconView(services: [icon], showsNumbers: true, ringStyle: .dual).renderedImage()
+            XCTAssertEqual(try XCTUnwrap(single.tiffRepresentation), try XCTUnwrap(dual.tiffRepresentation))
+        }
     }
 
     @MainActor

@@ -10,6 +10,7 @@ final class SubscriptionProviderTests: XCTestCase {
         """#.utf8))
         XCTAssertEqual(snapshot.window?.percentageText, "75%")
         XCTAssertEqual(snapshot.window?.title, "Weekly")
+        XCTAssertEqual(snapshot.weeklyWindow, snapshot.window)
         XCTAssertEqual(snapshot.window?.resetsAt, ISO8601DateFormatter().date(from: "2026-11-30T12:00:00Z"))
         XCTAssertEqual(snapshot.prepaidCents, 1234)
         XCTAssertEqual(snapshot.prepaidText, "$12.34")
@@ -36,6 +37,7 @@ final class SubscriptionProviderTests: XCTestCase {
         let exhausted = try GrokUsageSnapshot.decode(Data(#"{"config":{"creditUsagePercent":100,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_MONTHLY"}}}"#.utf8))
         XCTAssertEqual(exhausted.window?.title, "Monthly")
         XCTAssertEqual(exhausted.window?.percentageText, "0%")
+        XCTAssertNil(exhausted.weeklyWindow)
         XCTAssertNil(exhausted.prepaidCents)
     }
 

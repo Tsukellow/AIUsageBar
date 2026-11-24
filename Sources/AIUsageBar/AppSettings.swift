@@ -65,6 +65,10 @@ enum MenuBarMeter: Equatable {
     }
 }
 
+enum MenuBarRingStyle: String {
+    case single, dual
+}
+
 enum AppSettings {
     static let refreshIntervalKey = "refreshIntervalSeconds"
     static let refreshIntervalMinutes = [1, 3, 5, 10, 15]
@@ -73,6 +77,8 @@ enum AppSettings {
     static let defaultInitialRefreshDelaySeconds = 60.0
     static let showMenuBarNumbersKey = "showMenuBarNumbers"
     static let defaultShowMenuBarNumbers = true
+    static let menuBarRingStyleKey = "menuBarRingStyle"
+    static let defaultMenuBarRingStyle: MenuBarRingStyle = .single
     static let antigravityThirdPartyDisplayKey = "antigravityThirdPartyDisplay"
     static let defaultAntigravityThirdPartyDisplay: AntigravityThirdPartyDisplay = .menuOnly
 
@@ -83,6 +89,11 @@ enum AppSettings {
 
     static func showMenuBarNumbers(in defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: self.showMenuBarNumbersKey) as? Bool ?? self.defaultShowMenuBarNumbers
+    }
+
+    static func menuBarRingStyle(in defaults: UserDefaults = .standard) -> MenuBarRingStyle {
+        defaults.string(forKey: self.menuBarRingStyleKey)
+            .flatMap(MenuBarRingStyle.init(rawValue:)) ?? self.defaultMenuBarRingStyle
     }
 
     static var refreshIntervalSeconds: Double {

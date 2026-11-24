@@ -3,62 +3,118 @@ import AppKit
 enum CenterSymbol {
     case checkmark
     case exclamation
+    case questionMark
 }
 
 /// Data for one service's ring + text block in the menu bar.
 struct ServiceIconData {
+    struct QuotaRings: Equatable {
+        let fiveHour: Double?
+        let weekly: Double
+    }
+
     let ringFraction: Double
     let topText: String
     let bottomText: String
     /// Optional ring color; nil uses the default menu bar tint.
     let ringColor: NSColor?
     let centerSymbol: CenterSymbol?
+    let quotaRings: QuotaRings?
 
-    init(ringFraction: Double, topText: String, bottomText: String, ringColor: NSColor? = nil, centerSymbol: CenterSymbol? = nil) {
+    init(ringFraction: Double, topText: String, bottomText: String, ringColor: NSColor? = nil,
+         centerSymbol: CenterSymbol? = nil, quotaRings: QuotaRings? = nil) {
         self.ringFraction = ringFraction
         self.topText = topText
         self.bottomText = bottomText
         self.ringColor = ringColor
         self.centerSymbol = centerSymbol
+        self.quotaRings = quotaRings
+    }
+
+    static func claude(fiveHour: Double?, weekly: Double?, ringColor: NSColor?) -> Self {
+        guard let fiveHour = self.clampedPercent(fiveHour), let weekly = self.clampedPercent(weekly)
+        else { return self.symbolOnly(.questionMark, ringColor: ringColor) }
+        return Self(ringFraction: fiveHour / 100, topText: self.percentageText(fiveHour),
+                    bottomText: self.percentageText(weekly), ringColor: ringColor,
+                    quotaRings: QuotaRings(fiveHour: fiveHour / 100, weekly: weekly / 100))
     }
 
     static func codex(rateLimits: RateLimitSnapshot?, ringColor: NSColor?) -> Self {
-        let fiveHour = rateLimits?.fiveHourRemainingPercent.map { min(100, max(0, $0)) }
-        let weekly = rateLimits?.weeklyRemainingPercent.map { min(100, max(0, $0)) }
+        guard let weekly = self.clampedPercent(rateLimits?.weeklyRemainingPercent)
+        else { return self.symbolOnly(.questionMark, ringColor: ringColor) }
+        let fiveHour = self.clampedPercent(rateLimits?.fiveHourRemainingPercent)
         return Self(
-            ringFraction: (fiveHour ?? weekly ?? 0) / 100,
-            topText: fiveHour.map { "\(Int($0.rounded()))%" } ?? (weekly == nil ? "--%" : ""),
-            bottomText: weekly.map { "\(Int($0.rounded()))%" } ?? "--%",
-            ringColor: ringColor
+            ringFraction: (fiveHour ?? weekly) / 100,
+            topText: fiveHour.map(self.percentageText) ?? "",
+            bottomText: self.percentageText(weekly),
+            ringColor: ringColor,
+            quotaRings: QuotaRings(fiveHour: fiveHour.map { $0 / 100 }, weekly: weekly / 100)
         )
     }
 
     static func antigravity(windows: AntigravityQuotaSnapshot.MenuWindows, isStale: Bool, ringColor: NSColor?) -> Self {
         if isStale {
-            return Self(ringFraction: 0, topText: "", bottomText: "", ringColor: ringColor, centerSymbol: .exclamation)
+            return self.symbolOnly(.exclamation, ringColor: ringColor)
         }
+        guard let fiveHours = windows.fiveHours, let weekly = windows.weekly
+        else { return self.symbolOnly(.questionMark, ringColor: ringColor) }
         return Self(
-            ringFraction: (windows.fiveHours ?? windows.weekly)?.remainingFraction ?? 0,
-            topText: windows.fiveHours?.percentageText ?? "--%",
-            bottomText: windows.weekly?.percentageText ?? "--%",
-            ringColor: ringColor
+            ringFraction: fiveHours.remainingFraction,
+            topText: fiveHours.percentageText,
+            bottomText: weekly.percentageText,
+            ringColor: ringColor,
+            quotaRings: QuotaRings(fiveHour: fiveHours.remainingFraction, weekly: weekly.remainingFraction)
         )
     }
+
+    static func grok(weekly: SubscriptionWindow?, ringColor: NSColor?) -> Self {
+        guard let weekly else { return self.symbolOnly(.questionMark, ringColor: ringColor) }
+        return Self(ringFraction: weekly.remainingFraction, topText: "", bottomText: weekly.percentageText,
+                    ringColor: ringColor)
+    }
+
+    static func deepSeek(balance: Double?, todayCost: Double?, settings: DeepSeekBalanceSettings, ringColor: NSColor?) -> Self {
+        guard let balance, let todayCost else { return self.symbolOnly(.questionMark, ringColor: ringColor) }
+        return Self(ringFraction: settings.ringFraction(for: balance), topText: String(format: "%.2f", todayCost),
+                    bottomText: String(format: "%.2f", balance), ringColor: ringColor,
+                    centerSymbol: settings.isLowBalance(balance) ? .exclamation : .checkmark)
+    }
+
+    private static func symbolOnly(_ symbol: CenterSymbol, ringColor: NSColor?) -> Self {
+        Self(ringFraction: 0, topText: "", bottomText: "", ringColor: ringColor, centerSymbol: symbol)
+    }
+
+    private static func clampedPercent(_ value: Double?) -> Double? {
+        value.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil }
+    }
+
+    private static func percentageText(_ value: Double) -> String { "\(Int(value.rounded()))%" }
 }
 
 @MainActor
 struct MenuBarIconView {
     let services: [ServiceIconData]
     let showsNumbers: Bool
+    let ringStyle: MenuBarRingStyle
+
+    init(services: [ServiceIconData], showsNumbers: Bool, ringStyle: MenuBarRingStyle = .single) {
+        self.services = services
+        self.showsNumbers = showsNumbers
+        self.ringStyle = ringStyle
+    }
 
     // MARK: - Layout constants
 
     private static let ringDiameter: CGFloat = 18
     private static let ringLineWidth: CGFloat = 2.0
+    private static let dualRingLineWidth: CGFloat = 1.5
+    private static let innerRingInset: CGFloat = 3
+    private static let weeklyRingAlpha: CGFloat = 0.78
     private static let textGap: CGFloat = 4
     private static let sectionGap: CGFloat = 8
     private static let iconHeight: CGFloat = 22
     private static let trackAlpha: CGFloat = 0.3
+    private static let secondaryTextAlpha: CGFloat = 0.55
 
     private static let topFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
     private static let bottomFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
@@ -69,7 +125,7 @@ struct MenuBarIconView {
     ]
     private static let bottomAttrs: [NSAttributedString.Key: Any] = [
         .font: MenuBarIconView.bottomFont,
-        .foregroundColor: NSColor.black.withAlphaComponent(0.55),
+        .foregroundColor: NSColor.black.withAlphaComponent(MenuBarIconView.secondaryTextAlpha),
     ]
 
     // MARK: - Rendering
@@ -88,7 +144,7 @@ struct MenuBarIconView {
         ) { _ in
             var x: CGFloat = 0
             for (i, block) in blocks.enumerated() {
-                Self.drawBlock(block, at: x, baseColor: baseColor, showsNumbers: self.showsNumbers)
+                Self.drawBlock(block, at: x, baseColor: baseColor, showsNumbers: self.showsNumbers, ringStyle: self.ringStyle)
                 x += block.width
                 if i < blocks.count - 1 {
                     if self.showsNumbers {
@@ -131,34 +187,23 @@ struct MenuBarIconView {
         return MeasuredBlock(data: data, topSize: topSize, bottomSize: bottomSize, width: blockWidth)
     }
 
-    private static func drawBlock(_ block: MeasuredBlock, at originX: CGFloat, baseColor: NSColor, showsNumbers: Bool) {
+    private static func drawBlock(_ block: MeasuredBlock, at originX: CGFloat, baseColor: NSColor,
+                                  showsNumbers: Bool, ringStyle: MenuBarRingStyle) {
         let ringColor = block.data.ringColor ?? baseColor
 
-        // Ring
         let center = NSPoint(x: originX + self.ringDiameter / 2, y: self.iconHeight / 2)
-        let radius = (self.ringDiameter - self.ringLineWidth) / 2
-
-        let track = NSBezierPath()
-        track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
-        track.lineWidth = self.ringLineWidth
-        track.lineCapStyle = .round
-        ringColor.withAlphaComponent(self.trackAlpha).setStroke()
-        track.stroke()
-
-        let clamped = min(max(block.data.ringFraction, 0), 1)
-        if clamped > 0.001 {
-            let arc = NSBezierPath()
-            arc.appendArc(
-                withCenter: center,
-                radius: radius,
-                startAngle: 270,
-                endAngle: 270 + 360 * clamped,
-                clockwise: false
-            )
-            arc.lineWidth = self.ringLineWidth
-            arc.lineCapStyle = .round
-            ringColor.setStroke()
-            arc.stroke()
+        if ringStyle == .dual, let quota = block.data.quotaRings {
+            let radius = (self.ringDiameter - self.dualRingLineWidth) / 2
+            Self.drawRing(at: center, radius: radius, lineWidth: self.dualRingLineWidth,
+                          fraction: quota.weekly, color: ringColor, progressAlpha: self.weeklyRingAlpha)
+            // A reported zero keeps its track; nil means this window does not apply.
+            if let fiveHour = quota.fiveHour {
+                Self.drawRing(at: center, radius: radius - self.innerRingInset, lineWidth: self.dualRingLineWidth,
+                              fraction: fiveHour, color: ringColor)
+            }
+        } else {
+            Self.drawRing(at: center, radius: (self.ringDiameter - self.ringLineWidth) / 2,
+                          lineWidth: self.ringLineWidth, fraction: block.data.ringFraction, color: ringColor)
         }
 
         // Center symbol (inside ring)
@@ -174,7 +219,7 @@ struct MenuBarIconView {
         ]
         let bottomAttrs: [NSAttributedString.Key: Any] = [
             .font: self.bottomFont,
-            .foregroundColor: baseColor.withAlphaComponent(0.55),
+            .foregroundColor: baseColor.withAlphaComponent(self.secondaryTextAlpha),
         ]
 
         let textX = originX + self.ringDiameter + self.textGap
@@ -192,11 +237,36 @@ struct MenuBarIconView {
         }
     }
 
+    private static func drawRing(at center: NSPoint, radius: CGFloat, lineWidth: CGFloat,
+                                 fraction: Double, color: NSColor, progressAlpha: CGFloat = 1) {
+        let track = NSBezierPath()
+        track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
+        track.lineWidth = lineWidth
+        track.lineCapStyle = .round
+        color.withAlphaComponent(self.trackAlpha).setStroke()
+        track.stroke()
+
+        let clamped = min(max(fraction, 0), 1)
+        guard clamped > 0.001 else { return }
+        let arc = NSBezierPath()
+        arc.appendArc(withCenter: center, radius: radius, startAngle: 270,
+                      endAngle: 270 + 360 * clamped, clockwise: false)
+        arc.lineWidth = lineWidth
+        arc.lineCapStyle = .round
+        color.withAlphaComponent(progressAlpha).setStroke()
+        arc.stroke()
+    }
+
     // MARK: - Center symbol
 
     private static func drawSymbol(_ symbol: CenterSymbol, at center: NSPoint, color: NSColor) {
         color.setStroke()
         switch symbol {
+        case .questionMark:
+            let mark = "?" as NSString
+            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: color]
+            let size = mark.size(withAttributes: attrs)
+            mark.draw(at: NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2), withAttributes: attrs)
         case .checkmark:
             let path = NSBezierPath()
             path.move(to: NSPoint(x: center.x - 3.5, y: center.y + 0.5))

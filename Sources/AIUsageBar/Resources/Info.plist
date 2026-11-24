@@ -11,9 +11,9 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleVersion</key>
-    <string>14</string>
+    <string>17</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.1.12</string>
+    <string>1.1.15</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>

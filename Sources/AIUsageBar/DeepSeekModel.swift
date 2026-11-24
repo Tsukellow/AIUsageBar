@@ -64,28 +64,6 @@ final class DeepSeekModel: ObservableObject {
         self.errorMessage = nil
     }
 
-    // MARK: - Menu bar properties
-
-    var menuBarRingFraction: Double {
-        guard let balance = self.snapshot?.balance else { return 0 }
-        return AppSettings.deepSeekBalanceSettings().ringFraction(for: balance)
-    }
-
-    var menuBarTopText: String {
-        guard let todayCost = self.snapshot?.todayCost else { return "--" }
-        return String(format: "%.2f", todayCost)
-    }
-
-    var menuBarBottomText: String {
-        guard let snapshot = self.snapshot else { return "--" }
-        return String(format: "%.2f", snapshot.balance)
-    }
-
-    var menuBarCenterSymbol: CenterSymbol? {
-        guard let snapshot = self.snapshot else { return nil }
-        return AppSettings.deepSeekBalanceSettings().isLowBalance(snapshot.balance) ? .exclamation : .checkmark
-    }
-
     var pendingInitialRefreshDueAt: Date? {
         guard self.snapshot == nil,
               !self.isRefreshing,

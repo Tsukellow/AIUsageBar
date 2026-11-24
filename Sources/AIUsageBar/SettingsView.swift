@@ -34,6 +34,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.refreshIntervalKey) private var refreshIntervalSeconds = AppSettings.defaultRefreshIntervalSeconds
     @AppStorage(AppSettings.initialRefreshDelaySecondsKey) private var initialRefreshDelaySeconds = AppSettings.defaultInitialRefreshDelaySeconds
     @AppStorage(AppSettings.showMenuBarNumbersKey) private var showMenuBarNumbers = AppSettings.defaultShowMenuBarNumbers
+    @AppStorage(AppSettings.menuBarRingStyleKey) private var menuBarRingStyle = AppSettings.defaultMenuBarRingStyle
     @AppStorage(AppSettings.antigravityThirdPartyDisplayKey) private var antigravityThirdPartyDisplay = AppSettings.defaultAntigravityThirdPartyDisplay
     @AppStorage(AppSettings.claudeSessionCookieKey) private var claudeSessionCookie = ""
     @AppStorage(AppSettings.deepSeekBearerTokenKey) private var deepSeekBearerToken = ""
@@ -164,6 +165,15 @@ struct SettingsView: View {
                             .controlSize(.small)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text("Turn off for rings only. Numbers stay visible in the drop-down.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        Divider()
+                        Picker("Quota rings", selection: self.$menuBarRingStyle) {
+                            Text("Single ring").tag(MenuBarRingStyle.single)
+                            Text("Dual rings").tag(MenuBarRingStyle.dual)
+                        }
+                        Text("For Claude, Codex, and Antigravity: inner ring shows 5-hour remaining; outer ring shows weekly remaining.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -326,7 +336,16 @@ struct SettingsView: View {
 
     private func ringColorSettings(_ provider: ProviderID) -> some View {
         self.settingsSection(title: "Ring Color", systemImage: "paintpalette") {
-            self.settingsCard { ProviderRingColorPicker(provider: provider) }
+            self.settingsCard {
+                if provider == .antigravity {
+                    VStack(spacing: 12) {
+                        RingColorPicker(title: AntigravityQuotaSnapshot.Pool.gemini.title, appearance: provider.ringAppearance)
+                        RingColorPicker(title: AntigravityQuotaSnapshot.Pool.thirdParty.title, appearance: .antigravityThirdParty)
+                    }
+                } else {
+                    RingColorPicker(title: "Menu bar ring", appearance: provider.ringAppearance)
+                }
+            }
         }
     }
 
@@ -530,19 +549,21 @@ private struct ProviderDisplayPicker: View {
     }
 }
 
-private struct ProviderRingColorPicker: View {
-    let provider: ProviderID
+private struct RingColorPicker: View {
+    let title: String
+    let appearance: RingAppearance
     @AppStorage private var hex: String
 
-    init(provider: ProviderID) {
-        self.provider = provider
-        self._hex = AppStorage(wrappedValue: "", provider.ringColorKey)
+    init(title: String, appearance: RingAppearance) {
+        self.title = title
+        self.appearance = appearance
+        self._hex = AppStorage(wrappedValue: "", appearance.key)
     }
 
     var body: some View {
         HStack {
-            ColorPicker("Menu bar ring", selection: Binding(
-                get: { Color(nsColor: self.provider.ringColor(override: self.hex)) },
+            ColorPicker(self.title, selection: Binding(
+                get: { Color(nsColor: self.appearance.color(override: self.hex)) },
                 set: { color in
                     if let rgb = NSColor(color).usingColorSpace(.sRGB) { self.hex = rgb.toHex() }
                 }
@@ -551,6 +572,7 @@ private struct ProviderRingColorPicker: View {
             Spacer()
             Button("Restore Default") { self.hex = "" }
                 .disabled(self.hex.isEmpty)
+                .accessibilityLabel("Restore default color for \(self.title)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -112,7 +112,7 @@ actor DeepSeekUsageService {
         cost: DeepSeekCostResponse?,
         today: String
     ) -> DeepSeekUsageSnapshot {
-        let balance = Double(summary.walletBalance ?? "0") ?? 0
+        let balance = summary.walletBalance.flatMap { Double($0) }.flatMap { $0.isFinite ? $0 : nil }
 
         let cacheHitRate = Self.extractTodayCacheHitRate(from: usage, today: today)
         let monthlyTokens = Int(summary.monthlyTokenUsage ?? "0") ?? 0

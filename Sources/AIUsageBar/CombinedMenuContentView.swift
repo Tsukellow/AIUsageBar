@@ -270,10 +270,10 @@ struct CombinedMenuContentView: View {
                                 refreshedAt: self.deepSeekModel.snapshot?.refreshedAt)
 
             if let snapshot = self.deepSeekModel.snapshot {
-                self.usageRow(title: "Balance", value: String(format: "¥%.2f", snapshot.balance))
+                self.usageRow(title: "Balance", value: Self.deepSeekAmountText(snapshot.balance))
                 self.usageRow(title: "Cache hit rate", value: String(format: "%.2f%%", snapshot.cacheHitRate))
-                self.usageRow(title: "Today cost", value: Self.deepSeekCostText(snapshot.todayCost))
-                self.usageRow(title: "Monthly cost", value: Self.deepSeekCostText(snapshot.monthlyCost))
+                self.usageRow(title: "Today cost", value: Self.deepSeekAmountText(snapshot.todayCost))
+                self.usageRow(title: "Monthly cost", value: Self.deepSeekAmountText(snapshot.monthlyCost))
             } else if let dueAt = self.deepSeekModel.pendingInitialRefreshDueAt {
                 Self.initialRefreshText("Initial sync starts in", until: dueAt)
             } else if self.deepSeekModel.isRefreshing {
@@ -301,7 +301,7 @@ struct CombinedMenuContentView: View {
 
     // MARK: - Helpers
 
-    private static func deepSeekCostText(_ amount: Double?) -> String {
+    private static func deepSeekAmountText(_ amount: Double?) -> String {
         amount.map { String(format: "¥%.2f", $0) } ?? "Unavailable"
     }
 

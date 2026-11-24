@@ -2,7 +2,7 @@ import Foundation
 
 struct DeepSeekUsageSnapshot: Sendable {
     let refreshedAt: Date
-    let balance: Double
+    let balance: Double?
     let cacheHitRate: Double
     let todayCost: Double?
     let monthlyTokens: Int
