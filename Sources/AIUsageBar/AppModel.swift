@@ -66,41 +66,6 @@ final class AppModel: ObservableObject {
         self.errorMessage = nil
     }
 
-    var menuBarFiveHourRemainingPercent: Double? {
-        guard let remaining = self.snapshot?.rateLimits?.fiveHourRemainingPercent else {
-            return nil
-        }
-        return min(100, max(0, remaining))
-    }
-
-    var menuBarFiveHourRemainingText: String {
-        guard let remaining = self.menuBarFiveHourRemainingPercent else {
-            return "--%"
-        }
-        return "\(Int(remaining.rounded()))%"
-    }
-
-    var menuBarWeeklyRemainingPercent: Double? {
-        guard let remaining = self.snapshot?.rateLimits?.weeklyRemainingPercent else {
-            return nil
-        }
-        return min(100, max(0, remaining))
-    }
-
-    var menuBarWeeklyRemainingText: String {
-        guard let remaining = self.menuBarWeeklyRemainingPercent else {
-            return "--%"
-        }
-        return "\(Int(remaining.rounded()))%"
-    }
-
-    var menuBarFiveHourRemainingFraction: Double {
-        guard let remaining = self.menuBarFiveHourRemainingPercent ?? self.menuBarWeeklyRemainingPercent else {
-            return 0
-        }
-        return remaining / 100
-    }
-
     var pendingInitialRefreshDueAt: Date? {
         guard self.snapshot == nil,
               !self.isRefreshing,

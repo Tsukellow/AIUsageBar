@@ -4,11 +4,11 @@ import Foundation
 struct GrokUsageSnapshot: Sendable {
     let window: SubscriptionWindow?
     let prepaidCents: Int?
-    let plan: String?
     let refreshedAt: Date
 
     var prepaidText: String? {
-        self.prepaidCents.map { String(format: "$%.2f", Double($0) / 100) }
+        guard let prepaidCents = self.prepaidCents, prepaidCents > 0 else { return nil }
+        return String(format: "$%.2f", Double(prepaidCents) / 100)
     }
 
     static func decode(_ data: Data, refreshedAt: Date = .now) throws -> Self {
@@ -27,15 +27,11 @@ struct GrokUsageSnapshot: Sendable {
         let storedBalance = config?.prepaidBalance?.val
         let balance = storedBalance.flatMap { $0 >= 0 ? $0 : nil }
         guard window != nil || balance != nil else { throw GrokBillingError.noUsage }
-        return Self(window: window, prepaidCents: balance, plan: payload.subscriptionTier, refreshedAt: refreshedAt)
+        return Self(window: window, prepaidCents: balance, refreshedAt: refreshedAt)
     }
 
     private struct Billing: Decodable {
         let config: Config?
-        let subscriptionTier: String?
-        enum CodingKeys: String, CodingKey {
-            case config, subscriptionTier = "subscription_tier"
-        }
     }
 
     private struct Config: Decodable {

@@ -21,6 +21,29 @@ struct ServiceIconData {
         self.ringColor = ringColor
         self.centerSymbol = centerSymbol
     }
+
+    static func codex(rateLimits: RateLimitSnapshot?, ringColor: NSColor?) -> Self {
+        let fiveHour = rateLimits?.fiveHourRemainingPercent.map { min(100, max(0, $0)) }
+        let weekly = rateLimits?.weeklyRemainingPercent.map { min(100, max(0, $0)) }
+        return Self(
+            ringFraction: (fiveHour ?? weekly ?? 0) / 100,
+            topText: fiveHour.map { "\(Int($0.rounded()))%" } ?? (weekly == nil ? "--%" : ""),
+            bottomText: weekly.map { "\(Int($0.rounded()))%" } ?? "--%",
+            ringColor: ringColor
+        )
+    }
+
+    static func antigravity(windows: AntigravityQuotaSnapshot.MenuWindows, isStale: Bool, ringColor: NSColor?) -> Self {
+        if isStale {
+            return Self(ringFraction: 0, topText: "", bottomText: "", ringColor: ringColor, centerSymbol: .exclamation)
+        }
+        return Self(
+            ringFraction: (windows.fiveHours ?? windows.weekly)?.remainingFraction ?? 0,
+            topText: windows.fiveHours?.percentageText ?? "--%",
+            bottomText: windows.weekly?.percentageText ?? "--%",
+            ringColor: ringColor
+        )
+    }
 }
 
 @MainActor
@@ -100,10 +123,11 @@ struct MenuBarIconView {
         guard showsNumbers else {
             return MeasuredBlock(data: data, topSize: .zero, bottomSize: .zero, width: self.ringDiameter)
         }
-        let topSize = (data.topText as NSString).size(withAttributes: self.topAttrs)
-        let bottomSize = (data.bottomText as NSString).size(withAttributes: self.bottomAttrs)
+        // NSString reports a line height even for an empty label.
+        let topSize = data.topText.isEmpty ? .zero : (data.topText as NSString).size(withAttributes: self.topAttrs)
+        let bottomSize = data.bottomText.isEmpty ? .zero : (data.bottomText as NSString).size(withAttributes: self.bottomAttrs)
         let textWidth = max(topSize.width, bottomSize.width)
-        let blockWidth = self.ringDiameter + self.textGap + textWidth
+        let blockWidth = self.ringDiameter + (textWidth > 0 ? self.textGap + textWidth : 0)
         return MeasuredBlock(data: data, topSize: topSize, bottomSize: bottomSize, width: blockWidth)
     }
 
@@ -157,14 +181,15 @@ struct MenuBarIconView {
         let textTotalHeight = block.topSize.height + block.bottomSize.height
         let textY = (self.iconHeight - textTotalHeight) / 2
 
-        (block.data.topText as NSString).draw(
-            at: NSPoint(x: textX, y: textY),
-            withAttributes: topAttrs
-        )
-        (block.data.bottomText as NSString).draw(
-            at: NSPoint(x: textX, y: textY + block.topSize.height),
-            withAttributes: bottomAttrs
-        )
+        if !block.data.topText.isEmpty {
+            (block.data.topText as NSString).draw(at: NSPoint(x: textX, y: textY), withAttributes: topAttrs)
+        }
+        if !block.data.bottomText.isEmpty {
+            (block.data.bottomText as NSString).draw(
+                at: NSPoint(x: textX, y: textY + block.topSize.height),
+                withAttributes: bottomAttrs
+            )
+        }
     }
 
     // MARK: - Center symbol

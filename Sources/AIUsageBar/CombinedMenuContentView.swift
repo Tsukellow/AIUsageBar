@@ -130,7 +130,6 @@ struct CombinedMenuContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             self.providerHeader("Grok", url: URL(string: "https://grok.com/dashboard")!, refreshedAt: self.grokModel.snapshot?.refreshedAt)
             if let snapshot = self.grokModel.snapshot {
-                if let plan = snapshot.plan, !plan.isEmpty { Text(plan).font(.caption).foregroundStyle(.secondary) }
                 if let window = snapshot.window {
                     self.usageWindowRow(title: window.title, value: "\(window.percentageText) remaining", resetsAt: window.resetsAt)
                 } else {

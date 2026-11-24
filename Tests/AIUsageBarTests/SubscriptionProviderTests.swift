@@ -8,12 +8,23 @@ final class SubscriptionProviderTests: XCTestCase {
         {"config":{"creditUsagePercent":25,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2026-11-30T12:00:00Z"},
         "prepaidBalance":{"val":1234}},"subscription_tier":"SuperGrok"}
         """#.utf8))
-        XCTAssertEqual(snapshot.plan, "SuperGrok")
         XCTAssertEqual(snapshot.window?.percentageText, "75%")
         XCTAssertEqual(snapshot.window?.title, "Weekly")
         XCTAssertEqual(snapshot.window?.resetsAt, ISO8601DateFormatter().date(from: "2026-11-30T12:00:00Z"))
         XCTAssertEqual(snapshot.prepaidCents, 1234)
         XCTAssertEqual(snapshot.prepaidText, "$12.34")
+    }
+
+    func testGrokHidesZeroCreditsWithoutHidingExhaustedSubscriptionQuota() throws {
+        for balance in [#"{}"#, #"{"val":0}"#] {
+            let data = Data("""
+            {"config":{"creditUsagePercent":100,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY"},"prepaidBalance":\(balance)}}
+            """.utf8)
+            let snapshot = try GrokUsageSnapshot.decode(data)
+            XCTAssertEqual(snapshot.prepaidCents, 0)
+            XCTAssertNil(snapshot.prepaidText)
+            XCTAssertEqual(snapshot.window?.percentageText, "0%")
+        }
     }
 
     func testGrokMissingUsageIsNotInferredFromTheWallet() throws {

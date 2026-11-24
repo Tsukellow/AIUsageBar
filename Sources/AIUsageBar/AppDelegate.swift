@@ -117,12 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ringColor: provider.ringColor()
             )
         case .codex:
-            return ServiceIconData(
-                ringFraction: self.codexModel.menuBarFiveHourRemainingFraction,
-                topText: self.codexModel.menuBarFiveHourRemainingText,
-                bottomText: self.codexModel.menuBarWeeklyRemainingText,
-                ringColor: provider.ringColor()
-            )
+            return .codex(rateLimits: self.codexModel.snapshot?.rateLimits, ringColor: provider.ringColor())
         case .antigravity:
             return self.antigravityIconData(windows: self.antigravityModel.menuGemini, color: provider.ringColor())
         case .grok:
@@ -145,12 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func antigravityIconData(windows: AntigravityQuotaSnapshot.MenuWindows, color: NSColor?) -> ServiceIconData {
-        ServiceIconData(
-            ringFraction: (windows.fiveHours ?? windows.weekly)?.remainingFraction ?? 0,
-            topText: windows.fiveHours?.percentageText ?? "--%",
-            bottomText: windows.weekly?.percentageText ?? "--%",
-            ringColor: color
-        )
+        .antigravity(windows: windows, isStale: self.antigravityModel.isStale, ringColor: color)
     }
 
     private func togglePopoverFromStatusItem() {
