@@ -10,16 +10,16 @@ final class ProviderAppearanceTests: XCTestCase {
 
         XCTAssertEqual(ProviderID.allCases.map(\.ringColorKey),
                        ["claudeRingColorHex", "codexRingColorHex", "geminiRingColorHex", "grokRingColorHex", "deepSeekRingColorHex"])
-        XCTAssertEqual(ProviderID.antigravity.ringColor(in: defaults).toHex(), "#96CCFF")
-        XCTAssertEqual(ProviderID.grok.ringColor(in: defaults).toHex(), "#9298A3")
+        XCTAssertEqual(ProviderID.antigravity.ringColor(in: defaults).toHex(), "#CDB0FF")
+        XCTAssertEqual(ProviderID.grok.ringColor(in: defaults).toHex(), "#BFC1C6")
         defaults.set("#777777", forKey: ProviderID.grok.ringColorKey)
         defaults.set("#EEDDEE", forKey: "deepSeekRingColorHex")
         XCTAssertEqual(ProviderID.grok.ringColor(in: defaults).toHex(), "#777777")
         XCTAssertEqual(ProviderID.deepSeek.ringColor(in: defaults).toHex(), "#EEDDEE")
-        XCTAssertEqual(ProviderID.antigravity.ringColor(in: defaults).toHex(), "#96CCFF")
+        XCTAssertEqual(ProviderID.antigravity.ringColor(in: defaults).toHex(), "#CDB0FF")
 
         defaults.set("", forKey: ProviderID.grok.ringColorKey)
-        XCTAssertEqual(ProviderID.grok.ringColor(in: defaults).toHex(), "#9298A3")
+        XCTAssertEqual(ProviderID.grok.ringColor(in: defaults).toHex(), "#BFC1C6")
     }
 
     func testDefaultPaletteIsDistinctAndVisibleOnDarkBackground() {
@@ -32,11 +32,12 @@ final class ProviderAppearanceTests: XCTestCase {
         }
 
         let dark = luminance(NSColor(hex: "#202124")!)
-        let providers = ProviderID.allCases
-        XCTAssertEqual(Set(providers.map(\.defaultRingColorHex)).count, providers.count)
-        for provider in providers {
-            let mark = luminance(provider.ringColor(override: nil))
-            XCTAssertGreaterThan((mark + 0.05) / (dark + 0.05), 4.5, provider.displayName)
+        let palette = ProviderID.allCases.map { ($0.displayName, $0.ringAppearance) }
+            + [("Antigravity Claude & GPT", RingAppearance.antigravityThirdParty)]
+        XCTAssertEqual(Set(palette.map { $0.1.defaultHex }).count, palette.count)
+        for (name, appearance) in palette {
+            let mark = luminance(appearance.color(override: nil))
+            XCTAssertGreaterThan((mark + 0.05) / (dark + 0.05), 4.5, name)
         }
     }
 
@@ -48,13 +49,13 @@ final class ProviderAppearanceTests: XCTestCase {
         let gemini = ProviderID.antigravity.ringAppearance
         let partner = RingAppearance.antigravityThirdParty
         XCTAssertNotEqual(gemini.key, partner.key)
-        XCTAssertEqual(partner.color(in: defaults).toHex(), "#D0AAFF")
+        XCTAssertEqual(partner.color(in: defaults).toHex(), "#CF8AC6")
         defaults.set("#11AABB", forKey: gemini.key)
         defaults.set("#AABB11", forKey: partner.key)
         XCTAssertEqual(gemini.color(in: defaults).toHex(), "#11AABB")
         XCTAssertEqual(partner.color(in: defaults).toHex(), "#AABB11")
         defaults.set("", forKey: partner.key)
-        XCTAssertEqual(partner.color(in: defaults).toHex(), "#D0AAFF")
+        XCTAssertEqual(partner.color(in: defaults).toHex(), "#CF8AC6")
         XCTAssertEqual(gemini.color(in: defaults).toHex(), "#11AABB")
     }
 }

@@ -173,6 +173,31 @@ final class MenuBarIconTests: XCTestCase {
     }
 
     @MainActor
+    func testDualQuotaArcsAreOpaqueAndEmptyTracksStayFaint() throws {
+        func leftEdgeAlphas(remaining: Double) throws -> [CGFloat] {
+            let quota = ServiceIconData.claude(fiveHour: remaining, weekly: remaining, ringColor: .white)
+            let icon = MenuBarIconView(services: [quota], showsNumbers: false).renderedImage()
+            let tiff = try XCTUnwrap(icon.tiffRepresentation)
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: tiff))
+            let scale = CGFloat(bitmap.pixelsWide) / icon.size.width
+            let y = bitmap.pixelsHigh / 2
+            // Sample the left edges at the vertical midpoint, away from the arc caps.
+            return [(0, 3), (3, 6)].map { start, end in
+                (Int(CGFloat(start) * scale)..<Int(CGFloat(end) * scale))
+                    .map { bitmap.colorAt(x: $0, y: y)?.alphaComponent ?? 0 }
+                    .max() ?? 0
+            }
+        }
+
+        let full = try leftEdgeAlphas(remaining: 100)
+        let empty = try leftEdgeAlphas(remaining: 0)
+        for (progress, track) in zip(full, empty) {
+            XCTAssertEqual(progress, 1, accuracy: 0.02)
+            XCTAssertEqual(track, 0.3, accuracy: 0.02)
+        }
+    }
+
+    @MainActor
     func testWeeklyOnlyCodexOmitsTheInnerRingButReportedZeroKeepsIt() throws {
         func icon(fiveHour: Double?) -> ServiceIconData {
             let limits = RateLimitSnapshot(fiveHourRemainingPercent: fiveHour, fiveHourResetsAt: nil,

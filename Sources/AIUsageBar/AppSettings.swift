@@ -22,8 +22,8 @@ enum ProviderID: String, CaseIterable {
         switch self {
         case .claude: "#D97357"
         case .codex: "#FFFFFF"
-        case .antigravity: "#96CCFF"
-        case .grok: "#9298A3"
+        case .antigravity: "#CDB0FF"
+        case .grok: "#BFC1C6"
         case .deepSeek: "#468CFA"
         }
     }

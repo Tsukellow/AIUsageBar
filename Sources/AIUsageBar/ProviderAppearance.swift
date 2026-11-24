@@ -4,7 +4,7 @@ struct RingAppearance {
     let key: String
     let defaultHex: String
 
-    static let antigravityThirdParty = Self(key: "antigravityThirdPartyRingColorHex", defaultHex: "#D0AAFF")
+    static let antigravityThirdParty = Self(key: "antigravityThirdPartyRingColorHex", defaultHex: "#CF8AC6")
 
     func color(override: String?) -> NSColor {
         NSColor(hex: override) ?? NSColor(hex: self.defaultHex) ?? .white

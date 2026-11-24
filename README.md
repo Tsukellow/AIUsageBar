@@ -6,7 +6,7 @@ A macOS menu bar app for checking **Claude, Codex, Antigravity, Grok, and DeepSe
 
 - Independent tracking and display settings for each provider: drop-down only, or menu bar and drop-down. The app keeps a menu entry even when no provider uses the menu bar.
 - **Settings → General → Menu Bar** can hide the numbers beside all menu-bar rings. Usage details in the drop-down are unchanged.
-- When both quota windows are available, Claude, Codex, and Antigravity use a weekly outer ring and a five-hour inner ring. Both strokes match the width of a single ring. Codex uses a single ring when only weekly usage is reported.
+- When both quota windows are available, Claude, Codex, and Antigravity use a weekly outer ring and a five-hour inner ring. Both use full-opacity progress strokes of the same width. Codex uses a single ring when only weekly usage is reported.
 - Each provider has its own menu-bar ring color, with a default and a restore button. The Settings sidebar uses locally packaged [provider icons](Artwork/ProviderIcons/SOURCES.md).
 - Antigravity's Gemini and Claude/GPT rings have independent colors. Menu-bar weekly figures use muted text; a ring with `?` indicates missing required data without displaying figures.
 - Claude and Codex usage windows and reset information when available from the provider.

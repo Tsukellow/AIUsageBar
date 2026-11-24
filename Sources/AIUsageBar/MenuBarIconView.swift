@@ -101,7 +101,6 @@ struct MenuBarIconView {
     private static let ringDiameter: CGFloat = 18
     private static let ringLineWidth: CGFloat = 2.0
     private static let innerRingInset: CGFloat = 3.5
-    private static let weeklyRingAlpha: CGFloat = 0.78
     private static let textGap: CGFloat = 4
     private static let sectionGap: CGFloat = 8
     private static let iconHeight: CGFloat = 22
@@ -187,7 +186,7 @@ struct MenuBarIconView {
         let radius = (self.ringDiameter - self.ringLineWidth) / 2
         if let quota = block.data.quotaRings {
             Self.drawRing(at: center, radius: radius, lineWidth: self.ringLineWidth,
-                          fraction: quota.weekly, color: ringColor, progressAlpha: self.weeklyRingAlpha)
+                          fraction: quota.weekly, color: ringColor)
             Self.drawRing(at: center, radius: radius - self.innerRingInset, lineWidth: self.ringLineWidth,
                           fraction: quota.fiveHour, color: ringColor)
         } else {
@@ -227,7 +226,7 @@ struct MenuBarIconView {
     }
 
     private static func drawRing(at center: NSPoint, radius: CGFloat, lineWidth: CGFloat,
-                                 fraction: Double, color: NSColor, progressAlpha: CGFloat = 1) {
+                                 fraction: Double, color: NSColor) {
         let track = NSBezierPath()
         track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
         track.lineWidth = lineWidth
@@ -242,7 +241,7 @@ struct MenuBarIconView {
                       endAngle: 270 + 360 * clamped, clockwise: false)
         arc.lineWidth = lineWidth
         arc.lineCapStyle = .round
-        color.withAlphaComponent(progressAlpha).setStroke()
+        color.withAlphaComponent(1).setStroke()
         arc.stroke()
     }
 
