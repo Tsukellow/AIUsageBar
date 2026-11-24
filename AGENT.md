@@ -43,7 +43,7 @@ Each model follows the same enablement pattern:
 2. If enabled, call `startLoop()` which delegates to `UsageRefreshScheduler.startRefreshLoop`
 3. The loop: initial delay (configurable 10s–2m) → first refresh → periodic refresh (1/3/5/10/15 min)
 4. `@Published var isEnabled` `didSet` writes to AppSettings and starts/stops the loop accordingly
-5. Turning tracking off cancels the loop and in-flight work, and invalidates results from the old connection. Any provider can be turned off, including the last one. Antigravity instead checks its local snapshot every five seconds; its callback skips capture while disabled.
+5. Turning tracking off cancels the loop and in-flight work, and invalidates results from the old connection. Any provider can be turned off, including the last one. Antigravity uses the same interval to reread its local snapshot, without a startup delay; its callback skips capture while disabled.
 
 ### refresh() flow (all models)
 

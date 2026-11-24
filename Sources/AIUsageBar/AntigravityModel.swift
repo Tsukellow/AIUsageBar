@@ -51,12 +51,11 @@ final class AntigravityModel: ObservableObject {
     }
 
     private func start() {
-        self.refreshNow()
-        self.loop = Task { [weak self] in
-            while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(5)) } catch { return }
-                self?.refreshNow()
-            }
+        self.loop = UsageRefreshScheduler.startRefreshLoop(
+            initialDelaySeconds: 0,
+            refreshIntervalSeconds: { AppSettings.refreshIntervalSeconds }
+        ) { [weak self] in
+            self?.refreshNow()
         }
     }
 
